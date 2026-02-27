@@ -5,7 +5,7 @@ export default function Login() {
   const navigate = useNavigate();
   const API_BASE = "http://localhost:3000";
 
-  const [mode, setMode] = useState("login"); 
+  const [mode, setMode] = useState("login");
   // "login" | "requestOTP" | "reset"
 
   const [email, setEmail] = useState("");
@@ -22,13 +22,23 @@ export default function Login() {
     setMessage("");
   };
 
+  const validateEmail = (value) => {
+    const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return regex.test(value);
+  };
+
   // LOGIN
   const handleLogin = async (e) => {
     e.preventDefault();
     clearMessages();
 
-    if (!email || !password) {
-      setError("Email and password required");
+    if (!validateEmail(email)) {
+      setError("Please enter a valid email address.");
+      return;
+    }
+
+    if (!password) {
+      setError("Password required");
       return;
     }
 
@@ -44,8 +54,15 @@ export default function Login() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message);
 
+      // ✅ STORE TOKEN
       localStorage.setItem("token", data.token);
-      navigate("/books");
+
+      // ✅ STORE USER (needed for avatar)
+      localStorage.setItem("user", JSON.stringify(data.user));
+
+      // ✅ ALWAYS GO TO DASHBOARD
+      navigate("/dashboard");
+
     } catch (err) {
       setError(err.message || "Login failed");
     } finally {
@@ -57,8 +74,8 @@ export default function Login() {
   const handleSendOTP = async () => {
     clearMessages();
 
-    if (!email) {
-      setError("Enter your registered email");
+    if (!validateEmail(email)) {
+      setError("Please enter a valid registered email.");
       return;
     }
 
@@ -83,12 +100,26 @@ export default function Login() {
     }
   };
 
+  // PASSWORD STRENGTH CHECK
+  const isStrongPassword = (pwd) => {
+    const strongRegex =
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[A-Za-z\d@$!%*?&]{8,}$/;
+    return strongRegex.test(pwd);
+  };
+
   // RESET PASSWORD
   const handleResetPassword = async () => {
     clearMessages();
 
     if (!otp || !newPassword) {
       setError("Enter OTP and new password");
+      return;
+    }
+
+    if (!isStrongPassword(newPassword)) {
+      setError(
+        "Password must be at least 8 characters and include uppercase, lowercase, and a number."
+      );
       return;
     }
 
@@ -122,8 +153,12 @@ export default function Login() {
           Home Library
         </h1>
 
-        {error && <div className="text-red-500 text-sm text-center">{error}</div>}
-        {message && <div className="text-green-500 text-sm text-center">{message}</div>}
+        {error && (
+          <div className="text-red-500 text-sm text-center">{error}</div>
+        )}
+        {message && (
+          <div className="text-green-500 text-sm text-center">{message}</div>
+        )}
 
         {/* LOGIN MODE */}
         {mode === "login" && (
@@ -132,7 +167,7 @@ export default function Login() {
               type="email"
               placeholder="Email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => setEmail(e.target.value.trim())}
               className="w-full px-4 py-2 rounded-lg border dark:bg-gray-700 dark:text-white"
             />
 
@@ -152,8 +187,10 @@ export default function Login() {
               {loading ? "Logging in..." : "Login"}
             </button>
 
-            <div className="text-center text-sm text-blue-600 cursor-pointer"
-                 onClick={() => setMode("requestOTP")}>
+            <div
+              className="text-center text-sm text-blue-600 cursor-pointer"
+              onClick={() => setMode("requestOTP")}
+            >
               Forgot Password?
             </div>
           </form>
@@ -166,7 +203,7 @@ export default function Login() {
               type="email"
               placeholder="Enter your registered email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => setEmail(e.target.value.trim())}
               className="w-full px-4 py-2 rounded-lg border dark:bg-gray-700 dark:text-white"
             />
 
@@ -178,8 +215,10 @@ export default function Login() {
               {loading ? "Sending..." : "Send OTP"}
             </button>
 
-            <div className="text-center text-sm cursor-pointer"
-                 onClick={() => setMode("login")}>
+            <div
+              className="text-center text-sm cursor-pointer"
+              onClick={() => setMode("login")}
+            >
               Back to Login
             </div>
           </div>

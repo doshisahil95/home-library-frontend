@@ -1,13 +1,75 @@
-import { Link, Outlet, useLocation } from "react-router-dom";
+import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
 
 export default function Layout() {
   const location = useLocation();
+  const navigate = useNavigate();
+
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [userInitial, setUserInitial] = useState("U");
+  const [theme, setTheme] = useState("light");
+
+  const API_BASE = "http://localhost:3000";
+
+  useEffect(() => {
+    const user = JSON.parse(localStorage.getItem("user"));
+    if (user?.email) {
+      setUserInitial(user.email.charAt(0).toUpperCase());
+    }
+
+    if (user?.theme === "dark") {
+      document.documentElement.classList.add("dark");
+      setTheme("dark");
+    }
+  }, []);
+
+  const toggleTheme = async () => {
+    const newTheme = theme === "dark" ? "light" : "dark";
+
+    try {
+      const token = localStorage.getItem("token");
+
+      const res = await fetch(`${API_BASE}/users/theme`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ theme: newTheme })
+      });
+
+      if (!res.ok) throw new Error("Failed to update theme");
+
+      // Update UI
+      if (newTheme === "dark") {
+        document.documentElement.classList.add("dark");
+      } else {
+        document.documentElement.classList.remove("dark");
+      }
+
+      // Update localStorage user
+      const user = JSON.parse(localStorage.getItem("user"));
+      user.theme = newTheme;
+      localStorage.setItem("user", JSON.stringify(user));
+
+      setTheme(newTheme);
+
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    navigate("/");
+  };
 
   const linkClasses = (path) =>
-    `block px-4 py-2 rounded-lg transition ${
-      location.pathname === path
-        ? "bg-blue-600 text-white"
-        : "text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
+    `block px-4 py-2 rounded-lg transition ${location.pathname === path
+      ? "bg-blue-600 text-white"
+      : "text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
     }`;
 
   return (
@@ -30,21 +92,125 @@ export default function Layout() {
         </nav>
       </aside>
 
-      {/* Main Area */}
       <div className="flex-1 flex flex-col">
 
         {/* Top Navbar */}
-        <header className="bg-white dark:bg-gray-800 shadow px-6 py-4">
+        <header className="bg-white dark:bg-gray-800 shadow px-6 py-4 flex justify-between items-center">
           <h1 className="text-lg font-semibold text-gray-800 dark:text-gray-100">
             Home Library System
           </h1>
+
+          <div className="relative">
+            <div
+              onClick={() => setDropdownOpen(!dropdownOpen)}
+              className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center cursor-pointer font-bold"
+            >
+              {userInitial}
+            </div>
+
+            {dropdownOpen && (
+              <div className="absolute right-0 mt-2 w-52 bg-white dark:bg-gray-800 rounded-lg shadow-lg py-2 z-50">
+
+                <button
+                  onClick={() => {
+                    setSettingsOpen(true);
+                    setDropdownOpen(false);
+                  }}
+                  className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200"
+                >
+                  ⚙️ Settings
+                </button>
+
+                <button
+                  onClick={handleLogout}
+                  className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200"
+                >
+                  🚪 Log Out
+                </button>
+
+              </div>
+            )}
+          </div>
         </header>
 
-        {/* Page Content */}
         <main className="flex-1 p-6">
           <Outlet />
         </main>
 
+        {/* SETTINGS MODAL */}
+        {settingsOpen && (
+          <Modal title="Settings" onClose={() => setSettingsOpen(false)}>
+            <div className="space-y-6">
+
+              {/* Appearance Section */}
+              <div>
+                <h3 className="text-md font-semibold text-gray-800 dark:text-gray-100">
+                  Appearance
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  Choose how the application should look.
+                </p>
+              </div>
+
+              {/* Enterprise Toggle Row */}
+              <div className="flex items-center justify-between">
+
+                <span
+                  className={`text-sm font-medium ${theme === "light"
+                    ? "text-gray-900 dark:text-white"
+                    : "text-gray-400"
+                    }`}
+                >
+                  Light
+                </span>
+
+                <button
+                  onClick={toggleTheme}
+                  className={`relative inline-flex h-6 w-12 items-center rounded-full transition ${theme === "dark" ? "bg-blue-600" : "bg-gray-300"
+                    }`}
+                >
+                  <span
+                    className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${theme === "dark" ? "translate-x-6" : "translate-x-1"
+                      }`}
+                  />
+                </button>
+
+                <span
+                  className={`text-sm font-medium ${theme === "dark"
+                    ? "text-gray-900 dark:text-white"
+                    : "text-gray-400"
+                    }`}
+                >
+                  Dark
+                </span>
+
+              </div>
+
+            </div>
+          </Modal>
+        )}
+
+      </div>
+    </div>
+  );
+}
+
+function Modal({ title, children, onClose }) {
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+      <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-xl w-full max-w-md">
+        <h2 className="text-lg font-bold mb-4 text-gray-800 dark:text-white">
+          {title}
+        </h2>
+
+        {children}
+
+        <button
+          onClick={onClose}
+          className="mt-6 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-100 px-4 py-2 rounded hover:bg-gray-300 dark:hover:bg-gray-600 transition"
+        >
+          Close
+        </button>
       </div>
     </div>
   );
