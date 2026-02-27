@@ -19,7 +19,7 @@ export default function Books() {
   });
 
   // 🔥 Updated route
-  const API_URL = "http://localhost:3000/app/books";
+  const API_URL = "http://localhost:3000/books";
 
   // Fetch books
   const fetchBooks = async () => {
@@ -27,16 +27,22 @@ export default function Books() {
       setLoading(true);
       setError("");
 
+      const token = localStorage.getItem("token");
+
       const res = await fetch(API_URL, {
         method: "GET",
-        cache: "no-store"
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
       });
 
+      const result = await res.json();
+
       if (!res.ok) {
-        throw new Error("Request failed");
+        throw new Error(result.message || "Unauthorized");
       }
 
-      const result = await res.json();
       setBooks(Array.isArray(result.data) ? result.data : []);
     } catch (err) {
       console.error(err);
@@ -163,8 +169,8 @@ export default function Books() {
                   <td className="px-6 py-4">
                     <span
                       className={`px-3 py-1 rounded-full text-sm font-medium ${book.status === "Available"
-                          ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
-                          : "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300"
+                        ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
+                        : "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300"
                         }`}
                     >
                       {book.status}

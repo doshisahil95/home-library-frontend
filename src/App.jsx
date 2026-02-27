@@ -6,6 +6,7 @@ import Dashboard from "./pages/Dashboard";
 import Books from "./pages/Books";
 import Layout from "./components/Layout";
 import ThemeToggle from "./components/ThemeToggle";
+import ProtectedRoute from "./components/ProtectedRoute";
 
 function App() {
   const [darkMode, setDarkMode] = useState(false);
@@ -34,9 +35,17 @@ function App() {
       <ThemeToggle darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
 
       <Routes>
+        {/* Public Route */}
         <Route path="/" element={<Login />} />
 
-        <Route element={<Layout />}>
+        {/* Protected Routes */}
+        <Route
+          element={
+            <ProtectedRoute>
+              <Layout />
+            </ProtectedRoute>
+          }
+        >
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/books" element={<Books />} />
         </Route>
