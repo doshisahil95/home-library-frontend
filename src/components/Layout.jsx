@@ -10,18 +10,18 @@ export default function Layout() {
   const [userInitial, setUserInitial] = useState("U");
   const [theme, setTheme] = useState("light");
 
-  const API_BASE = "http://localhost:3000";
+  const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:3000";
 
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem("user"));
+
     if (user?.email) {
       setUserInitial(user.email.charAt(0).toUpperCase());
     }
 
-    if (user?.theme === "dark") {
-      document.documentElement.classList.add("dark");
-      setTheme("dark");
-    }
+    const savedTheme = user?.theme || "light";
+    setTheme(savedTheme);
+    document.documentElement.classList.toggle("dark", savedTheme === "dark");
   }, []);
 
   const toggleTheme = async () => {
@@ -34,27 +34,20 @@ export default function Layout() {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ theme: newTheme })
+        body: JSON.stringify({ theme: newTheme }),
       });
 
       if (!res.ok) throw new Error("Failed to update theme");
 
-      // Update UI
-      if (newTheme === "dark") {
-        document.documentElement.classList.add("dark");
-      } else {
-        document.documentElement.classList.remove("dark");
-      }
+      document.documentElement.classList.toggle("dark", newTheme === "dark");
 
-      // Update localStorage user
-      const user = JSON.parse(localStorage.getItem("user"));
+      const user = JSON.parse(localStorage.getItem("user")) || {};
       user.theme = newTheme;
       localStorage.setItem("user", JSON.stringify(user));
 
       setTheme(newTheme);
-
     } catch (err) {
       console.error(err);
     }
@@ -67,14 +60,14 @@ export default function Layout() {
   };
 
   const linkClasses = (path) =>
-    `block px-4 py-2 rounded-lg transition ${location.pathname === path
-      ? "bg-blue-600 text-white"
-      : "text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
+    `block px-4 py-2 rounded-lg transition ${
+      location.pathname === path
+        ? "bg-blue-600 text-white"
+        : "text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
     }`;
 
   return (
-    <div className="flex min-h-screen bg-gray-100 dark:bg-gray-900 transition-colors duration-300">
-
+    <div className="flex min-h-screen bg-gray-100 dark:bg-gray-900">
       {/* Sidebar */}
       <aside className="w-64 bg-white dark:bg-gray-800 p-6 shadow-lg hidden md:block">
         <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100 mb-8">
@@ -93,7 +86,6 @@ export default function Layout() {
       </aside>
 
       <div className="flex-1 flex flex-col">
-
         {/* Top Navbar */}
         <header className="bg-white dark:bg-gray-800 shadow px-6 py-4 flex justify-between items-center">
           <h1 className="text-lg font-semibold text-gray-800 dark:text-gray-100">
@@ -110,7 +102,6 @@ export default function Layout() {
 
             {dropdownOpen && (
               <div className="absolute right-0 mt-2 w-52 bg-white dark:bg-gray-800 rounded-lg shadow-lg py-2 z-50">
-
                 <button
                   onClick={() => {
                     setSettingsOpen(true);
@@ -127,7 +118,6 @@ export default function Layout() {
                 >
                   🚪 Log Out
                 </button>
-
               </div>
             )}
           </div>
@@ -141,8 +131,6 @@ export default function Layout() {
         {settingsOpen && (
           <Modal title="Settings" onClose={() => setSettingsOpen(false)}>
             <div className="space-y-6">
-
-              {/* Appearance Section */}
               <div>
                 <h3 className="text-md font-semibold text-gray-800 dark:text-gray-100">
                   Appearance
@@ -152,44 +140,43 @@ export default function Layout() {
                 </p>
               </div>
 
-              {/* Enterprise Toggle Row */}
               <div className="flex items-center justify-between">
-
                 <span
-                  className={`text-sm font-medium ${theme === "light"
-                    ? "text-gray-900 dark:text-white"
-                    : "text-gray-400"
-                    }`}
+                  className={`text-sm font-medium ${
+                    theme === "light"
+                      ? "text-gray-900 dark:text-white"
+                      : "text-gray-400"
+                  }`}
                 >
                   Light
                 </span>
 
                 <button
                   onClick={toggleTheme}
-                  className={`relative inline-flex h-6 w-12 items-center rounded-full transition ${theme === "dark" ? "bg-blue-600" : "bg-gray-300"
-                    }`}
+                  className={`relative inline-flex h-6 w-12 items-center rounded-full transition ${
+                    theme === "dark" ? "bg-blue-600" : "bg-gray-300"
+                  }`}
                 >
                   <span
-                    className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${theme === "dark" ? "translate-x-6" : "translate-x-1"
-                      }`}
+                    className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${
+                      theme === "dark" ? "translate-x-6" : "translate-x-1"
+                    }`}
                   />
                 </button>
 
                 <span
-                  className={`text-sm font-medium ${theme === "dark"
-                    ? "text-gray-900 dark:text-white"
-                    : "text-gray-400"
-                    }`}
+                  className={`text-sm font-medium ${
+                    theme === "dark"
+                      ? "text-gray-900 dark:text-white"
+                      : "text-gray-400"
+                  }`}
                 >
                   Dark
                 </span>
-
               </div>
-
             </div>
           </Modal>
         )}
-
       </div>
     </div>
   );
@@ -207,7 +194,7 @@ function Modal({ title, children, onClose }) {
 
         <button
           onClick={onClose}
-          className="mt-6 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-100 px-4 py-2 rounded hover:bg-gray-300 dark:hover:bg-gray-600 transition"
+          className="mt-6 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-100 px-4 py-2 rounded hover:bg-gray-300 dark:hover:bg-gray-600"
         >
           Close
         </button>
