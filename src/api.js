@@ -3,80 +3,81 @@ const BASE_URL = "http://localhost:3000";
 function getAuthHeaders() {
     const token = localStorage.getItem("token");
 
-    return {
+    const headers = {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
     };
+
+    if (token) headers.Authorization = `Bearer ${token}`;
+
+    return headers;
 }
 
-export async function fetchBooks() {
-    const res = await fetch(`${BASE_URL}/fetchAllBooks`, {
-        method: "GET",
+async function request(url, options = {}) {
+
+    const res = await fetch(`${BASE_URL}${url}`, {
         headers: getAuthHeaders(),
+        ...options
     });
 
     const data = await res.json();
 
-    if (!res.ok) throw new Error(data.message || "Failed to fetch books");
+    if (!res.ok) throw new Error(data.message);
 
     return data;
 }
 
-export async function addBook(book) {
-    const res = await fetch(`${BASE_URL}/addBook`, {
-        method: "POST",
-        headers: getAuthHeaders(),
-        body: JSON.stringify(book),
-    });
+// Switched from cursor to page-based pagination
+export function fetchBooks(limit, page = 1, sortBy = null, sortOrder = "asc") {
 
-    const data = await res.json();
+    const params = new URLSearchParams({ limit, page });
 
-    if (!res.ok) throw new Error(data.message || "Failed to add book");
+    if (sortBy) {
+        params.append("sortBy", sortBy);
+        params.append("sortOrder", sortOrder);
+    }
 
-    return data;
+    return request(`/fetchAllBooks?${params}`);
 }
 
-export async function updateBook(id, book) {
-    const res = await fetch(`${BASE_URL}/updateBook/${id}`, {
-        method: "PUT",
-        headers: getAuthHeaders(),
-        body: JSON.stringify(book),
-    });
+export function searchBooks(query, field, limit, cursor) {
 
-    const data = await res.json();
-
-    if (!res.ok) throw new Error(data.message || "Failed to update book");
-
-    return data;
-}
-
-export async function deleteBook(id) {
-    const res = await fetch(`${BASE_URL}/deleteBook/${id}`, {
-        method: "DELETE",
-        headers: getAuthHeaders(),
-    });
-
-    const data = await res.json();
-
-    if (!res.ok) throw new Error(data.message || "Failed to delete book");
-
-    return data;
-}
-
-export async function searchBooks(query, field) {
     const params = new URLSearchParams({
         q: query,
-        field: field,
+        field,
+        limit
     });
 
-    const res = await fetch(`${BASE_URL}/searchBooks?${params.toString()}`, {
-        method: "GET",
-        headers: getAuthHeaders(),
+    if (cursor) params.append("searchAfter", JSON.stringify(cursor));
+
+    return request(`/searchBooks?${params}`);
+}
+
+export function addBook(book) {
+
+    return request(`/addBook`, {
+        method: "POST",
+        body: JSON.stringify(book)
     });
 
-    const data = await res.json();
+}
 
-    if (!res.ok) throw new Error(data.message || "Failed to search books");
+export function updateBook(id, book) {
 
-    return data;
+    return request(`/updateBook/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(book)
+    });
+
+}
+
+export function deleteBook(id) {
+
+    return request(`/deleteBook/${id}`, {
+        method: "DELETE"
+    });
+
+}
+
+export function getDashboardStats() {
+    return request(`/dashboard`);
 }
