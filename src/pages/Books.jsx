@@ -12,6 +12,7 @@ import {
 
 const EMPTY_FORM = { title: "", author: "", house: "", genre: [] };
 
+// Defined outside component so identity is stable across renders
 function SortIcon({ field, sortBy, sortOrder }) {
   if (sortBy !== field) return <span className="ml-1 text-gray-400">↕</span>;
   return <span className="ml-1">{sortOrder === "asc" ? "↑" : "↓"}</span>;
@@ -54,12 +55,12 @@ export default function Books() {
   const [sortBy, setSortBy] = useState(null);
   const [sortOrder, setSortOrder] = useState("asc");
 
-  // Replaced cursor state with simple page number + total info
+  // Offset pagination for regular browsing
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalBooks, setTotalBooks] = useState(0);
 
-  // Search still uses cursor pagination since Atlas Search returns relevance-ranked results
+  // Cursor pagination for Atlas Search (relevance-ranked results)
   const [searchCursor, setSearchCursor] = useState(null);
   const [searchPrevCursors, setSearchPrevCursors] = useState([]);
 
@@ -76,6 +77,10 @@ export default function Books() {
   const [isEditing, setIsEditing] = useState(false);
   const [currentId, setCurrentId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
+
+  // Capture the title before the delete modal opens so it's available even
+  // if the book scrolls off the current page while the modal is open
+  const [deletingBookTitle, setDeletingBookTitle] = useState("");
 
   const [limit, setLimit] = useState(10);
 
@@ -100,7 +105,14 @@ export default function Books() {
         setError("");
         if (showLoader) setShowSkeleton(true);
 
-        const result = await apiFetchBooks(limitToUse, page, currentSortBy, currentSortOrder);
+        // Signal forwarded so the fetch is actually cancelled on abort
+        const result = await apiFetchBooks(
+          limitToUse,
+          page,
+          currentSortBy,
+          currentSortOrder,
+          abortRef.current.signal
+        );
 
         const data = Array.isArray(result.data) ? result.data : [];
         setBooks(data);
@@ -136,8 +148,17 @@ export default function Books() {
       try {
         const limitToUse = customLimit || limit;
         setError("");
+        // Show skeleton on first search (no cursor = fresh query)
+        if (!cursor) setShowSkeleton(true);
 
-        const result = await searchBooks(query.trim(), field, limitToUse, cursor);
+        // Signal forwarded so the fetch is actually cancelled on abort
+        const result = await searchBooks(
+          query.trim(),
+          field,
+          limitToUse,
+          cursor,
+          abortRef.current.signal
+        );
 
         const data = Array.isArray(result.data) ? result.data : [];
         setBooks(data);
@@ -147,7 +168,6 @@ export default function Books() {
         }
         setSearchCursor(result.pagination?.nextCursor || null);
 
-        // Show total count if available, otherwise clear it
         setTotalBooks(0);
         setTotalPages(1);
         setCurrentPage(1);
@@ -211,7 +231,12 @@ export default function Books() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!formData.title.trim() || !formData.author.trim() || !formData.house || formData.genre.length === 0) {
+    if (
+      !formData.title.trim() ||
+      !formData.author.trim() ||
+      !formData.house ||
+      formData.genre.length === 0
+    ) {
       setModalError("All fields are required");
       return;
     }
@@ -219,11 +244,17 @@ export default function Books() {
     try {
       setModalError("");
 
+      const payload = {
+        ...formData,
+        title: formData.title.trim(),
+        author: formData.author.trim(),
+      };
+
       if (isEditing) {
-        await updateBook(currentId, formData);
+        await updateBook(currentId, payload);
         toast.success("Book updated");
       } else {
-        await addBook(formData);
+        await addBook(payload);
         toast.success("Book added");
       }
 
@@ -245,8 +276,11 @@ export default function Books() {
     setShowModal(true);
   };
 
-  const openDeleteModal = (id) => {
-    setCurrentId(id);
+  const openDeleteModal = (book) => {
+    // Capture title immediately so the modal text is stable regardless of
+    // what happens to the books list while the modal is open
+    setCurrentId(book._id);
+    setDeletingBookTitle(book.title);
     setShowDeleteModal(true);
   };
 
@@ -284,9 +318,11 @@ export default function Books() {
     setModalError("");
   };
 
-  const deletingBookTitle = books.find((b) => b._id === currentId)?.title;
+  const sortableHeader =
+    "cursor-pointer select-none hover:text-blue-600 dark:hover:text-blue-400 transition-colors";
 
-  const sortableHeader = "cursor-pointer select-none hover:text-blue-600 dark:hover:text-blue-400 transition-colors";
+  // Cap skeleton rows at 25 — rendering 100 skeleton rows is unnecessary DOM churn
+  const skeletonRows = Math.min(limit, 25);
 
   // ------------------- Render -------------------
   return (
@@ -342,13 +378,22 @@ export default function Books() {
         <table className="min-w-full table-fixed text-left">
           <thead className="bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200">
             <tr>
-              <th className={`px-6 py-3 w-2/6 ${sortableHeader}`} onClick={() => handleSort("title")}>
+              <th
+                className={`px-6 py-3 w-2/6 ${sortableHeader}`}
+                onClick={() => handleSort("title")}
+              >
                 Title <SortIcon field="title" sortBy={sortBy} sortOrder={sortOrder} />
               </th>
-              <th className={`px-6 py-3 w-1/5 ${sortableHeader}`} onClick={() => handleSort("author")}>
+              <th
+                className={`px-6 py-3 w-1/5 ${sortableHeader}`}
+                onClick={() => handleSort("author")}
+              >
                 Author <SortIcon field="author" sortBy={sortBy} sortOrder={sortOrder} />
               </th>
-              <th className={`px-6 py-3 w-1/5 ${sortableHeader}`} onClick={() => handleSort("house")}>
+              <th
+                className={`px-6 py-3 w-1/5 ${sortableHeader}`}
+                onClick={() => handleSort("house")}
+              >
                 House <SortIcon field="house" sortBy={sortBy} sortOrder={sortOrder} />
               </th>
               <th className="px-6 py-3 w-1/5">Genre</th>
@@ -357,33 +402,52 @@ export default function Books() {
           </thead>
           <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
             {showSkeleton
-              ? [...Array(limit)].map((_, i) => (
+              ? [...Array(skeletonRows)].map((_, i) => (
                 <tr key={i}>
                   {[...Array(5)].map((_, j) => (
                     <td key={j} className="px-6 py-4">
-                      <div className="h-4 w-32 rounded-lg bg-gray-200 dark:bg-gray-700 animate-pulse"></div>
+                      <div className="h-4 w-32 rounded-lg bg-gray-200 dark:bg-gray-700 animate-pulse" />
                     </td>
                   ))}
                 </tr>
               ))
               : books.map((book) => (
-                <tr key={book._id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition">
-                  <td className="px-6 py-4 text-gray-800 dark:text-gray-100 truncate">{book.title}</td>
-                  <td className="px-6 py-4 text-gray-600 dark:text-gray-300 truncate">{book.author}</td>
-                  <td className="px-6 py-4 text-gray-600 dark:text-gray-300 truncate">{book.house}</td>
+                <tr
+                  key={book._id}
+                  className="hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+                >
+                  <td className="px-6 py-4 text-gray-800 dark:text-gray-100 truncate">
+                    {book.title}
+                  </td>
+                  <td className="px-6 py-4 text-gray-600 dark:text-gray-300 truncate">
+                    {book.author}
+                  </td>
+                  <td className="px-6 py-4 text-gray-600 dark:text-gray-300 truncate">
+                    {book.house}
+                  </td>
                   <td className="px-6 py-4">
                     <div className="flex flex-wrap gap-1">
                       {book.genre?.map((g, idx) => (
-                        <span key={idx} className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded-full">{g}</span>
+                        <span
+                          key={idx}
+                          className="px-2 py-1 text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-full"
+                        >
+                          {g}
+                        </span>
                       ))}
                     </div>
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex justify-end gap-2">
-                      <button onClick={() => openEditModal(book)} className="px-3 py-1 text-sm bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 rounded-lg hover:bg-gray-300">Edit</button>
+                      <button
+                        onClick={() => openEditModal(book)}
+                        className="px-3 py-1 text-sm bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 rounded-lg hover:bg-gray-300"
+                      >
+                        Edit
+                      </button>
                       <button
                         disabled={deletingId === book._id}
-                        onClick={() => openDeleteModal(book._id)}
+                        onClick={() => openDeleteModal(book)}
                         className="px-3 py-1 text-sm bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-50"
                       >
                         {deletingId === book._id ? "Deleting..." : "Delete"}
@@ -406,7 +470,9 @@ export default function Books() {
         {/* Left: total count */}
         <div className="w-32 text-sm text-gray-500 dark:text-gray-400">
           {!isSearchActive && totalBooks > 0 && (
-            <span>{totalBooks} {totalBooks === 1 ? "book" : "books"}</span>
+            <span>
+              {totalBooks} {totalBooks === 1 ? "book" : "books"}
+            </span>
           )}
         </div>
 
@@ -424,17 +490,18 @@ export default function Books() {
 
               {buildPageNumbers(currentPage, totalPages).map((page, idx) =>
                 page === "..." ? (
-                  <span key={`ellipsis-${idx}`} className="px-3 py-2 text-gray-400">…</span>
+                  <span key={`ellipsis-${idx}`} className="px-3 py-2 text-gray-400">
+                    …
+                  </span>
                 ) : (
                   <button
                     key={page}
                     disabled={isPaging}
                     onClick={() => goToPage(page)}
-                    className={`px-3 py-2 rounded-lg transition ${
-                      page === currentPage
+                    className={`px-3 py-2 rounded-lg transition ${page === currentPage
                         ? "bg-blue-600 text-white font-semibold"
                         : "bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-500"
-                    } disabled:opacity-50`}
+                      } disabled:opacity-50`}
                   >
                     {page}
                   </button>
@@ -484,7 +551,9 @@ export default function Books() {
 
         {/* Right: books per page */}
         <div className="flex items-center gap-2 w-32 justify-end">
-          <span className="text-sm text-gray-600 dark:text-gray-300 whitespace-nowrap">Per page</span>
+          <span className="text-sm text-gray-600 dark:text-gray-300 whitespace-nowrap">
+            Per page
+          </span>
           <select
             value={limit}
             onChange={(e) => {
@@ -527,9 +596,7 @@ export default function Books() {
                 type="text"
                 placeholder="Title"
                 value={formData.title}
-                onChange={(e) =>
-                  setFormData({ ...formData, title: e.target.value })
-                }
+                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                 className="w-full px-4 py-2 rounded-lg border dark:bg-gray-700 dark:text-white"
               />
 
@@ -537,9 +604,7 @@ export default function Books() {
                 type="text"
                 placeholder="Author"
                 value={formData.author}
-                onChange={(e) =>
-                  setFormData({ ...formData, author: e.target.value })
-                }
+                onChange={(e) => setFormData({ ...formData, author: e.target.value })}
                 className="w-full px-4 py-2 rounded-lg border dark:bg-gray-700 dark:text-white"
               />
 
@@ -547,7 +612,6 @@ export default function Books() {
                 <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
                   Select House
                 </label>
-
                 <div className="flex flex-wrap gap-2">
                   {housesData.map((house, index) => {
                     const isSelected = formData.house === house;
@@ -557,8 +621,8 @@ export default function Books() {
                         key={index}
                         onClick={() => setFormData({ ...formData, house })}
                         className={`px-3 py-1 rounded-full text-sm ${isSelected
-                          ? "bg-green-600 text-white"
-                          : "bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                            ? "bg-green-600 text-white"
+                            : "bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200"
                           }`}
                       >
                         {house}
@@ -572,7 +636,6 @@ export default function Books() {
                 <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
                   Select Genre
                 </label>
-
                 <div className="flex flex-wrap gap-2">
                   {genresData.map((genre, index) => {
                     const isSelected = formData.genre.includes(genre);
@@ -594,8 +657,8 @@ export default function Books() {
                           }
                         }}
                         className={`px-3 py-1 rounded-full text-sm ${isSelected
-                          ? "bg-blue-600 text-white"
-                          : "bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                            ? "bg-blue-600 text-white"
+                            : "bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200"
                           }`}
                       >
                         {genre}
@@ -613,7 +676,6 @@ export default function Books() {
                 >
                   Cancel
                 </button>
-
                 <button
                   type="submit"
                   className="px-4 py-2 rounded-lg bg-blue-600 text-white"
@@ -655,7 +717,6 @@ export default function Books() {
               >
                 Cancel
               </button>
-
               <button
                 onClick={confirmDelete}
                 className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700"

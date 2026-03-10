@@ -1,5 +1,7 @@
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import toast from "react-hot-toast";
+import { updateTheme as apiUpdateTheme } from "../api";
 
 export default function Layout() {
   const location = useLocation();
@@ -7,10 +9,11 @@ export default function Layout() {
 
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [userInitial, setUserInitial] = useState("U");
+  const [userInitial, setUserInitial] = useState("?");
   const [theme, setTheme] = useState("light");
 
-  const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:3000";
+  // Ref used to detect clicks outside the avatar dropdown
+  const dropdownRef = useRef(null);
 
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem("user"));
@@ -24,32 +27,45 @@ export default function Layout() {
     document.documentElement.classList.toggle("dark", savedTheme === "dark");
   }, []);
 
+  // Close the dropdown when clicking anywhere outside it
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setDropdownOpen(false);
+      }
+    };
+
+    if (dropdownOpen) {
+      document.addEventListener("mousedown", handleOutsideClick);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+    };
+  }, [dropdownOpen]);
+
   const toggleTheme = async () => {
     const newTheme = theme === "dark" ? "light" : "dark";
 
     try {
-      const token = localStorage.getItem("token");
-
-      const res = await fetch(`${API_BASE}/users/theme`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ theme: newTheme }),
-      });
-
-      if (!res.ok) throw new Error("Failed to update theme");
+      await apiUpdateTheme(newTheme);
 
       document.documentElement.classList.toggle("dark", newTheme === "dark");
 
-      const user = JSON.parse(localStorage.getItem("user")) || {};
+      // Read the stored user object safely — guard against null/corrupt data
+      let user = {};
+      try {
+        user = JSON.parse(localStorage.getItem("user")) || {};
+      } catch {
+        user = {};
+      }
       user.theme = newTheme;
       localStorage.setItem("user", JSON.stringify(user));
 
       setTheme(newTheme);
     } catch (err) {
       console.error(err);
+      toast.error("Failed to save theme preference.");
     }
   };
 
@@ -92,10 +108,11 @@ export default function Layout() {
             Home Library System
           </h1>
 
-          <div className="relative">
+          {/* Avatar + dropdown — ref attached here for outside-click detection */}
+          <div className="relative" ref={dropdownRef}>
             <div
-              onClick={() => setDropdownOpen(!dropdownOpen)}
-              className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center cursor-pointer font-bold"
+              onClick={() => setDropdownOpen((prev) => !prev)}
+              className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center cursor-pointer font-bold select-none"
             >
               {userInitial}
             </div>
@@ -184,8 +201,15 @@ export default function Layout() {
 
 function Modal({ title, children, onClose }) {
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-xl w-full max-w-md">
+    // Backdrop click closes the modal — consistent with books/delete modals
+    <div
+      className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-xl w-full max-w-md"
+        onClick={(e) => e.stopPropagation()}
+      >
         <h2 className="text-lg font-bold mb-4 text-gray-800 dark:text-white">
           {title}
         </h2>
