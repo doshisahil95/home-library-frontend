@@ -14,25 +14,7 @@
 
 1. Make sure your `.env` file is listed in `.gitignore` and has never been committed to GitHub.
 
-2. Add `process.exit(1)` to the MongoDB connection failure handler in `server.js` if you haven't already:
-   ```js
-   mongoose.connect(process.env.MONGODB_URI, { ... })
-     .then(() => console.log('Connected to MongoDB'))
-     .catch((err) => {
-       console.error('Error connecting to MongoDB:', err);
-       process.exit(1); // ← this line
-     });
-   ```
-   Without this, Railway will show the server as running even if the database connection failed.
-
-3. Make sure your `package.json` has a `start` script — Railway uses this to run the app:
-   ```json
-   "scripts": {
-     "start": "node server.js"
-   }
-   ```
-
-4. Push all changes to GitHub.
+2. Push all changes to GitHub.
 
 ---
 
