@@ -1,22 +1,16 @@
 // Single source of truth for the API base URL.
-// Set VITE_API_BASE in .env.local for local dev and in .env for production.
+// Set VITE_API_BASE in .env.local for local dev and in Vercel dashboard for production.
 const BASE_URL = import.meta.env.VITE_API_BASE || "http://localhost:3000";
 
 function getAuthHeaders() {
     const token = localStorage.getItem("token");
-
-    const headers = {
-        "Content-Type": "application/json",
-    };
-
+    const headers = { "Content-Type": "application/json" };
     if (token) headers.Authorization = `Bearer ${token}`;
-
     return headers;
 }
 
 // Central fetch wrapper for authenticated requests.
-// Detects 401 (expired / invalid token) and redirects to login cleanly
-// instead of leaving the user stuck on a broken page.
+// Detects 401 (expired / invalid token) and redirects to login cleanly.
 async function request(url, options = {}) {
     const res = await fetch(`${BASE_URL}${url}`, {
         headers: getAuthHeaders(),
@@ -27,34 +21,27 @@ async function request(url, options = {}) {
         localStorage.removeItem("token");
         localStorage.removeItem("user");
         window.location.href = "/";
-        // Return a never-resolving promise so no downstream code runs
         return new Promise(() => { });
     }
 
     const data = await res.json();
-
     if (!res.ok) throw new Error(data.message);
-
     return data;
 }
 
 // Auth-free wrapper for public endpoints (login, OTP, reset).
-// Does NOT attach an Authorization header or trigger a 401 redirect.
 async function publicRequest(url, body) {
     const res = await fetch(`${BASE_URL}${url}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
     });
-
     const data = await res.json();
-
     if (!res.ok) throw new Error(data.message);
-
     return data;
 }
 
-// ─── Auth ────────────────────────────────────────────────────────────────────
+// ─── Auth ─────────────────────────────────────────────────────────────────────
 
 export function loginUser(credentials) {
     return publicRequest("/login", credentials);
@@ -68,10 +55,11 @@ export function resetPassword(body) {
     return publicRequest("/reset-password", body);
 }
 
-// ─── Books ───────────────────────────────────────────────────────────────────
+// ─── Books ────────────────────────────────────────────────────────────────────
 
-// Page-based pagination for regular browsing
-export function fetchBooks(limit, page = 1, sortBy = null, sortOrder = "asc", signal) {
+// Page-based pagination for regular browsing.
+// Accepts optional house/genre/status filters — only appended when non-empty.
+export function fetchBooks(limit, page = 1, sortBy = null, sortOrder = "asc", filters = {}, signal) {
     const params = new URLSearchParams({ limit, page });
 
     if (sortBy) {
@@ -79,13 +67,22 @@ export function fetchBooks(limit, page = 1, sortBy = null, sortOrder = "asc", si
         params.append("sortOrder", sortOrder);
     }
 
+    if (filters.house) params.append("filterHouse", filters.house);
+    if (filters.genre) params.append("filterGenre", filters.genre);
+    if (filters.status) params.append("filterStatus", filters.status);
+
     return request(`/fetchAllBooks?${params}`, { signal });
 }
 
-// Cursor-based pagination for Atlas Search (relevance-ranked)
-export function searchBooks(query, field, limit, cursor, signal) {
-    const params = new URLSearchParams({ q: query, field, limit });
+// Cursor-based pagination for Atlas Search.
+// Text query is optional — filters alone are valid.
+export function searchBooks(query, filters = {}, limit, cursor, signal) {
+    const params = new URLSearchParams({ limit });
 
+    if (query) params.append("q", query);
+    if (filters.house) params.append("filterHouse", filters.house);
+    if (filters.genre) params.append("filterGenre", filters.genre);
+    if (filters.status) params.append("filterStatus", filters.status);
     if (cursor) params.append("searchAfter", JSON.stringify(cursor));
 
     return request(`/searchBooks?${params}`, { signal });
@@ -106,18 +103,16 @@ export function updateBook(id, book) {
 }
 
 export function deleteBook(id) {
-    return request(`/deleteBook/${id}`, {
-        method: "DELETE",
-    });
+    return request(`/deleteBook/${id}`, { method: "DELETE" });
 }
 
-// ─── Dashboard ───────────────────────────────────────────────────────────────
+// ─── Dashboard ────────────────────────────────────────────────────────────────
 
 export function getDashboardStats() {
     return request("/dashboard");
 }
 
-// ─── User ────────────────────────────────────────────────────────────────────
+// ─── User ─────────────────────────────────────────────────────────────────────
 
 export function updateTheme(theme) {
     return request("/users/theme", {

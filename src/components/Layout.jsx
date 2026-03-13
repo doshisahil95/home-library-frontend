@@ -1,67 +1,70 @@
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useState, useEffect, useRef } from "react";
+import { LayoutDashboard, BookOpen, ChevronLeft, ChevronRight, Menu, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { updateTheme as apiUpdateTheme } from "../api";
 
+const NAV_ITEMS = [
+  { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { path: "/books",     label: "Books",     icon: BookOpen },
+];
+
 export default function Layout() {
-  const location = useLocation();
-  const navigate = useNavigate();
+  const location  = useLocation();
+  const navigate  = useNavigate();
 
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [userInitial, setUserInitial] = useState("?");
-  const [theme, setTheme] = useState("light");
+  const [userInitial,  setUserInitial]  = useState("?");
+  const [theme,        setTheme]        = useState("light");
 
-  // Ref used to detect clicks outside the avatar dropdown
+  // Sidebar state — desktop collapsed, mobile open
+  const [collapsed,   setCollapsed]   = useState(false);
+  const [mobileOpen,  setMobileOpen]  = useState(false);
+
   const dropdownRef = useRef(null);
 
   useEffect(() => {
-    const user = JSON.parse(localStorage.getItem("user"));
-
-    if (user?.email) {
-      setUserInitial(user.email.charAt(0).toUpperCase());
-    }
-
-    const savedTheme = user?.theme || "light";
-    setTheme(savedTheme);
-    document.documentElement.classList.toggle("dark", savedTheme === "dark");
+    try {
+      const user = JSON.parse(localStorage.getItem("user"));
+      if (user?.email) setUserInitial(user.email.charAt(0).toUpperCase());
+      const savedTheme = user?.theme || "light";
+      setTheme(savedTheme);
+      document.documentElement.classList.toggle("dark", savedTheme === "dark");
+    } catch { /* ignore corrupt localStorage */ }
   }, []);
 
-  // Close the dropdown when clicking anywhere outside it
+  // Close dropdown on outside click
   useEffect(() => {
     const handleOutsideClick = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
         setDropdownOpen(false);
       }
     };
-
-    if (dropdownOpen) {
-      document.addEventListener("mousedown", handleOutsideClick);
-    }
-
-    return () => {
-      document.removeEventListener("mousedown", handleOutsideClick);
-    };
+    if (dropdownOpen) document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, [dropdownOpen]);
+
+  // Close mobile sidebar on route change
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [location.pathname]);
+
+  // Prevent body scroll when mobile sidebar is open
+  useEffect(() => {
+    document.body.style.overflow = mobileOpen ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
+  }, [mobileOpen]);
 
   const toggleTheme = async () => {
     const newTheme = theme === "dark" ? "light" : "dark";
-
     try {
       await apiUpdateTheme(newTheme);
-
       document.documentElement.classList.toggle("dark", newTheme === "dark");
-
-      // Read the stored user object safely — guard against null/corrupt data
       let user = {};
-      try {
-        user = JSON.parse(localStorage.getItem("user")) || {};
-      } catch {
-        user = {};
-      }
+      try { user = JSON.parse(localStorage.getItem("user")) || {}; } catch { user = {}; }
       user.theme = newTheme;
       localStorage.setItem("user", JSON.stringify(user));
-
       setTheme(newTheme);
     } catch (err) {
       console.error(err);
@@ -76,39 +79,132 @@ export default function Layout() {
   };
 
   const linkClasses = (path) =>
-    `block px-4 py-2 rounded-lg transition ${
+    `flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
       location.pathname === path
         ? "bg-blue-600 text-white"
         : "text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
     }`;
 
+  // Shared sidebar content — used for both desktop and mobile
+  const SidebarContent = ({ isCollapsed = false }) => (
+    <div className="flex flex-col h-full">
+      {/* Logo */}
+      <div className={`flex items-center gap-2 mb-6 px-1 ${isCollapsed ? "justify-center" : ""}`}>
+        <span className="text-2xl leading-none">📚</span>
+        {!isCollapsed && (
+          <span className="text-lg font-bold text-gray-800 dark:text-gray-100 whitespace-nowrap">
+            Home Library
+          </span>
+        )}
+      </div>
+
+      {/* Nav */}
+      <nav className="space-y-1 flex-1">
+        {NAV_ITEMS.map(({ path, label, icon: Icon }, idx) => (
+          <div key={path}>
+            <Link
+              to={path}
+              title={isCollapsed ? label : undefined}
+              className={`${linkClasses(path)} ${isCollapsed ? "justify-center px-2" : ""}`}
+            >
+              <Icon size={18} className="shrink-0" />
+              {!isCollapsed && <span className="text-sm font-medium">{label}</span>}
+            </Link>
+            {/* Separator after Dashboard */}
+            {idx === 0 && (
+              <hr className="my-2 border-gray-200 dark:border-gray-700" />
+            )}
+          </div>
+        ))}
+      </nav>
+    </div>
+  );
+
   return (
     <div className="flex min-h-screen bg-gray-100 dark:bg-gray-900">
-      {/* Sidebar */}
-      <aside className="w-64 bg-white dark:bg-gray-800 p-6 shadow-lg hidden md:block">
-        <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100 mb-8">
-          📚 Home Library
-        </h2>
 
-        <nav className="space-y-2">
-          <Link to="/dashboard" className={linkClasses("/dashboard")}>
-            Dashboard
-          </Link>
+      {/* ── Desktop Sidebar ─────────────────────────────────────────────── */}
+      <aside
+        className={`
+          relative hidden md:flex flex-col flex-shrink-0
+          bg-white dark:bg-gray-800 shadow-lg
+          transition-all duration-300 ease-in-out
+          ${collapsed ? "w-16 p-3" : "w-64 p-6"}
+        `}
+      >
+        <SidebarContent isCollapsed={collapsed} />
 
-          <Link to="/books" className={linkClasses("/books")}>
-            Books
-          </Link>
-        </nav>
+        {/* Collapse toggle — sits on the right edge, vertically centred */}
+        <button
+          onClick={() => setCollapsed((c) => !c)}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          className="
+            absolute -right-3 top-1/2 -translate-y-1/2
+            w-6 h-6 rounded-full
+            bg-white dark:bg-gray-800
+            border border-gray-200 dark:border-gray-700
+            shadow-sm
+            flex items-center justify-center
+            text-gray-500 dark:text-gray-400
+            hover:text-blue-600 dark:hover:text-blue-400
+            hover:border-blue-400 dark:hover:border-blue-500
+            transition-colors z-10
+          "
+        >
+          {collapsed
+            ? <ChevronRight size={12} />
+            : <ChevronLeft  size={12} />
+          }
+        </button>
       </aside>
 
-      <div className="flex-1 flex flex-col">
-        {/* Top Navbar */}
-        <header className="bg-white dark:bg-gray-800 shadow px-6 py-4 flex justify-between items-center">
-          <h1 className="text-lg font-semibold text-gray-800 dark:text-gray-100">
-            Home Library System
-          </h1>
+      {/* ── Mobile Sidebar Overlay ───────────────────────────────────────── */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black bg-opacity-40 md:hidden"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
 
-          {/* Avatar + dropdown — ref attached here for outside-click detection */}
+      <aside
+        className={`
+          fixed top-0 left-0 h-full z-50 w-64 p-6
+          bg-white dark:bg-gray-800 shadow-xl
+          transform transition-transform duration-300 ease-in-out
+          md:hidden
+          ${mobileOpen ? "translate-x-0" : "-translate-x-full"}
+        `}
+      >
+        {/* Close button */}
+        <button
+          onClick={() => setMobileOpen(false)}
+          className="absolute top-4 right-4 text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-100"
+        >
+          <X size={20} />
+        </button>
+
+        <SidebarContent isCollapsed={false} />
+      </aside>
+
+      {/* ── Main Content ─────────────────────────────────────────────────── */}
+      <div className="flex-1 flex flex-col min-w-0">
+
+        {/* Top Navbar */}
+        <header className="bg-white dark:bg-gray-800 shadow px-4 md:px-6 py-4 flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            {/* Hamburger — mobile only */}
+            <button
+              onClick={() => setMobileOpen(true)}
+              className="md:hidden text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+            >
+              <Menu size={22} />
+            </button>
+            <h1 className="text-lg font-semibold text-gray-800 dark:text-gray-100">
+              Home Library
+            </h1>
+          </div>
+
+          {/* Avatar + dropdown */}
           <div className="relative" ref={dropdownRef}>
             <div
               onClick={() => setDropdownOpen((prev) => !prev)}
@@ -120,15 +216,11 @@ export default function Layout() {
             {dropdownOpen && (
               <div className="absolute right-0 mt-2 w-52 bg-white dark:bg-gray-800 rounded-lg shadow-lg py-2 z-50">
                 <button
-                  onClick={() => {
-                    setSettingsOpen(true);
-                    setDropdownOpen(false);
-                  }}
+                  onClick={() => { setSettingsOpen(true); setDropdownOpen(false); }}
                   className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200"
                 >
                   ⚙️ Settings
                 </button>
-
                 <button
                   onClick={handleLogout}
                   className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200"
@@ -140,68 +232,44 @@ export default function Layout() {
           </div>
         </header>
 
-        <main className="flex-1 p-6">
+        <main className="flex-1 p-4 md:p-6 overflow-x-hidden">
           <Outlet />
         </main>
-
-        {/* SETTINGS MODAL */}
-        {settingsOpen && (
-          <Modal title="Settings" onClose={() => setSettingsOpen(false)}>
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-md font-semibold text-gray-800 dark:text-gray-100">
-                  Appearance
-                </h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                  Choose how the application should look.
-                </p>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <span
-                  className={`text-sm font-medium ${
-                    theme === "light"
-                      ? "text-gray-900 dark:text-white"
-                      : "text-gray-400"
-                  }`}
-                >
-                  Light
-                </span>
-
-                <button
-                  onClick={toggleTheme}
-                  className={`relative inline-flex h-6 w-12 items-center rounded-full transition ${
-                    theme === "dark" ? "bg-blue-600" : "bg-gray-300"
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${
-                      theme === "dark" ? "translate-x-6" : "translate-x-1"
-                    }`}
-                  />
-                </button>
-
-                <span
-                  className={`text-sm font-medium ${
-                    theme === "dark"
-                      ? "text-gray-900 dark:text-white"
-                      : "text-gray-400"
-                  }`}
-                >
-                  Dark
-                </span>
-              </div>
-            </div>
-          </Modal>
-        )}
       </div>
+
+      {/* Settings Modal */}
+      {settingsOpen && (
+        <Modal title="Settings" onClose={() => setSettingsOpen(false)}>
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-md font-semibold text-gray-800 dark:text-gray-100">Appearance</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                Choose how the application should look.
+              </p>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className={`text-sm font-medium ${theme === "light" ? "text-gray-900 dark:text-white" : "text-gray-400"}`}>
+                Light
+              </span>
+              <button
+                onClick={toggleTheme}
+                className={`relative inline-flex h-6 w-12 items-center rounded-full transition ${theme === "dark" ? "bg-blue-600" : "bg-gray-300"}`}
+              >
+                <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${theme === "dark" ? "translate-x-6" : "translate-x-1"}`} />
+              </button>
+              <span className={`text-sm font-medium ${theme === "dark" ? "text-gray-900 dark:text-white" : "text-gray-400"}`}>
+                Dark
+              </span>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
 
 function Modal({ title, children, onClose }) {
   return (
-    // Backdrop click closes the modal — consistent with books/delete modals
     <div
       className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50"
       onClick={onClose}
@@ -210,12 +278,8 @@ function Modal({ title, children, onClose }) {
         className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-xl w-full max-w-md"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-lg font-bold mb-4 text-gray-800 dark:text-white">
-          {title}
-        </h2>
-
+        <h2 className="text-lg font-bold mb-4 text-gray-800 dark:text-white">{title}</h2>
         {children}
-
         <button
           onClick={onClose}
           className="mt-6 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-100 px-4 py-2 rounded hover:bg-gray-300 dark:hover:bg-gray-600"
@@ -225,4 +289,4 @@ function Modal({ title, children, onClose }) {
       </div>
     </div>
   );
-}
+} 
