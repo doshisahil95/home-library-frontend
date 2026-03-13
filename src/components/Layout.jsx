@@ -6,87 +6,19 @@ import { updateTheme as apiUpdateTheme } from "../api";
 
 const NAV_ITEMS = [
   { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { path: "/books",     label: "Books",     icon: BookOpen },
+  { path: "/books", label: "Books", icon: BookOpen },
 ];
 
-export default function Layout() {
-  const location  = useLocation();
-  const navigate  = useNavigate();
-
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [userInitial,  setUserInitial]  = useState("?");
-  const [theme,        setTheme]        = useState("light");
-
-  // Sidebar state — desktop collapsed, mobile open
-  const [collapsed,   setCollapsed]   = useState(false);
-  const [mobileOpen,  setMobileOpen]  = useState(false);
-
-  const dropdownRef = useRef(null);
-
-  useEffect(() => {
-    try {
-      const user = JSON.parse(localStorage.getItem("user"));
-      if (user?.email) setUserInitial(user.email.charAt(0).toUpperCase());
-      const savedTheme = user?.theme || "light";
-      setTheme(savedTheme);
-      document.documentElement.classList.toggle("dark", savedTheme === "dark");
-    } catch { /* ignore corrupt localStorage */ }
-  }, []);
-
-  // Close dropdown on outside click
-  useEffect(() => {
-    const handleOutsideClick = (e) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
-        setDropdownOpen(false);
-      }
-    };
-    if (dropdownOpen) document.addEventListener("mousedown", handleOutsideClick);
-    return () => document.removeEventListener("mousedown", handleOutsideClick);
-  }, [dropdownOpen]);
-
-  // Close mobile sidebar on route change
-  useEffect(() => {
-    setMobileOpen(false);
-  }, [location.pathname]);
-
-  // Prevent body scroll when mobile sidebar is open
-  useEffect(() => {
-    document.body.style.overflow = mobileOpen ? "hidden" : "";
-    return () => { document.body.style.overflow = ""; };
-  }, [mobileOpen]);
-
-  const toggleTheme = async () => {
-    const newTheme = theme === "dark" ? "light" : "dark";
-    try {
-      await apiUpdateTheme(newTheme);
-      document.documentElement.classList.toggle("dark", newTheme === "dark");
-      let user = {};
-      try { user = JSON.parse(localStorage.getItem("user")) || {}; } catch { user = {}; }
-      user.theme = newTheme;
-      localStorage.setItem("user", JSON.stringify(user));
-      setTheme(newTheme);
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to save theme preference.");
-    }
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    navigate("/");
-  };
-
+// Defined outside Layout so it isn't re-created on every render.
+// Receives only what it needs — no closure over Layout's full state.
+function SidebarContent({ isCollapsed, currentPath }) {
   const linkClasses = (path) =>
-    `flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
-      location.pathname === path
-        ? "bg-blue-600 text-white"
-        : "text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
+    `flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${currentPath === path
+      ? "bg-blue-600 text-white"
+      : "text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
     }`;
 
-  // Shared sidebar content — used for both desktop and mobile
-  const SidebarContent = ({ isCollapsed = false }) => (
+  return (
     <div className="flex flex-col h-full">
       {/* Logo */}
       <div className={`flex items-center gap-2 mb-6 px-1 ${isCollapsed ? "justify-center" : ""}`}>
@@ -119,11 +51,79 @@ export default function Layout() {
       </nav>
     </div>
   );
+}
+
+export default function Layout() {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [userInitial, setUserInitial] = useState("?");
+  const [theme, setTheme] = useState("light");
+  const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    try {
+      const user = JSON.parse(localStorage.getItem("user"));
+      if (user?.email) setUserInitial(user.email.charAt(0).toUpperCase());
+      const savedTheme = user?.theme || "light";
+      setTheme(savedTheme);
+      document.documentElement.classList.toggle("dark", savedTheme === "dark");
+    } catch { /* ignore corrupt localStorage */ }
+  }, []);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setDropdownOpen(false);
+      }
+    };
+    if (dropdownOpen) document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, [dropdownOpen]);
+
+  // Close mobile sidebar on route change
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [location.pathname]);
+
+  // Lock body scroll when mobile sidebar is open
+  useEffect(() => {
+    document.body.style.overflow = mobileOpen ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
+  }, [mobileOpen]);
+
+  const toggleTheme = async () => {
+    const newTheme = theme === "dark" ? "light" : "dark";
+    try {
+      await apiUpdateTheme(newTheme);
+      document.documentElement.classList.toggle("dark", newTheme === "dark");
+      let user = {};
+      try { user = JSON.parse(localStorage.getItem("user")) || {}; } catch { user = {}; }
+      user.theme = newTheme;
+      localStorage.setItem("user", JSON.stringify(user));
+      setTheme(newTheme);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to save theme preference.");
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    navigate("/");
+  };
 
   return (
     <div className="flex min-h-screen bg-gray-100 dark:bg-gray-900">
 
-      {/* ── Desktop Sidebar ─────────────────────────────────────────────── */}
+      {/* ── Desktop Sidebar ──────────────────────────────────────────────── */}
       <aside
         className={`
           relative hidden md:flex flex-col flex-shrink-0
@@ -132,9 +132,9 @@ export default function Layout() {
           ${collapsed ? "w-16 p-3" : "w-64 p-6"}
         `}
       >
-        <SidebarContent isCollapsed={collapsed} />
+        <SidebarContent isCollapsed={collapsed} currentPath={location.pathname} />
 
-        {/* Collapse toggle — sits on the right edge, vertically centred */}
+        {/* Collapse toggle — right edge, vertically centred */}
         <button
           onClick={() => setCollapsed((c) => !c)}
           title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
@@ -143,18 +143,14 @@ export default function Layout() {
             w-6 h-6 rounded-full
             bg-white dark:bg-gray-800
             border border-gray-200 dark:border-gray-700
-            shadow-sm
-            flex items-center justify-center
+            shadow-sm flex items-center justify-center
             text-gray-500 dark:text-gray-400
             hover:text-blue-600 dark:hover:text-blue-400
             hover:border-blue-400 dark:hover:border-blue-500
             transition-colors z-10
           "
         >
-          {collapsed
-            ? <ChevronRight size={12} />
-            : <ChevronLeft  size={12} />
-          }
+          {collapsed ? <ChevronRight size={12} /> : <ChevronLeft size={12} />}
         </button>
       </aside>
 
@@ -170,20 +166,17 @@ export default function Layout() {
         className={`
           fixed top-0 left-0 h-full z-50 w-64 p-6
           bg-white dark:bg-gray-800 shadow-xl
-          transform transition-transform duration-300 ease-in-out
-          md:hidden
+          transform transition-transform duration-300 ease-in-out md:hidden
           ${mobileOpen ? "translate-x-0" : "-translate-x-full"}
         `}
       >
-        {/* Close button */}
         <button
           onClick={() => setMobileOpen(false)}
           className="absolute top-4 right-4 text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-100"
         >
           <X size={20} />
         </button>
-
-        <SidebarContent isCollapsed={false} />
+        <SidebarContent isCollapsed={false} currentPath={location.pathname} />
       </aside>
 
       {/* ── Main Content ─────────────────────────────────────────────────── */}
@@ -192,7 +185,6 @@ export default function Layout() {
         {/* Top Navbar */}
         <header className="bg-white dark:bg-gray-800 shadow px-4 md:px-6 py-4 flex justify-between items-center">
           <div className="flex items-center gap-3">
-            {/* Hamburger — mobile only */}
             <button
               onClick={() => setMobileOpen(true)}
               className="md:hidden text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
@@ -207,7 +199,7 @@ export default function Layout() {
           {/* Avatar + dropdown */}
           <div className="relative" ref={dropdownRef}>
             <div
-              onClick={() => setDropdownOpen((prev) => !prev)}
+              onClick={() => setDropdownOpen((p) => !p)}
               className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center cursor-pointer font-bold select-none"
             >
               {userInitial}
@@ -237,7 +229,7 @@ export default function Layout() {
         </main>
       </div>
 
-      {/* Settings Modal */}
+      {/* ── Settings Modal ────────────────────────────────────────────────── */}
       {settingsOpen && (
         <Modal title="Settings" onClose={() => setSettingsOpen(false)}>
           <div className="space-y-6">
@@ -289,4 +281,4 @@ function Modal({ title, children, onClose }) {
       </div>
     </div>
   );
-} 
+}

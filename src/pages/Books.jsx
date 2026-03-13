@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { Filter } from "lucide-react";
+import { Filter, ChevronDown } from "lucide-react";
 import toast from "react-hot-toast";
 import housesData from "../data/houses.json";
 import genresData from "../data/genres.json";
@@ -107,7 +107,7 @@ export default function Books() {
 
   const fetchBooks = useCallback(async (
     page = 1, showLoader = true, customLimit = null,
-    currentSortBy = null, currentSortOrder = "asc", filters = activeFilters
+    currentSortBy = null, currentSortOrder = "asc", filters
   ) => {
     if (abortRef.current) abortRef.current.abort();
     abortRef.current = new AbortController();
@@ -117,7 +117,7 @@ export default function Books() {
       if (showLoader) setShowSkeleton(true);
       const result = await apiFetchBooks(
         limitToUse, page, currentSortBy, currentSortOrder,
-        filters, abortRef.current.signal
+        filters || {}, abortRef.current.signal
       );
       const data = Array.isArray(result.data) ? result.data : [];
       setBooks(data);
@@ -138,7 +138,7 @@ export default function Books() {
   // ─── Fetch Search Results (Atlas Search) ─────────────────────────────────
 
   const fetchSearch = useCallback(async (
-    query, filters = activeFilters, cursor = null, direction = "next", customLimit = null
+    query, filters, cursor = null, direction = "next", customLimit = null
   ) => {
     if (abortRef.current) abortRef.current.abort();
     abortRef.current = new AbortController();
@@ -147,7 +147,7 @@ export default function Books() {
       setError("");
       if (!cursor) setShowSkeleton(true);
       const result = await searchBooks(
-        query.trim(), filters, limitToUse, cursor, abortRef.current.signal
+        query.trim(), filters || {}, limitToUse, cursor, abortRef.current.signal
       );
       const data = Array.isArray(result.data) ? result.data : [];
       setBooks(data);
@@ -423,15 +423,17 @@ export default function Books() {
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg overflow-hidden">
         <table className="w-full table-fixed text-left">
           <colgroup>
-            <col style={{ width: "28%" }} />
-            <col style={{ width: "18%" }} />
-            <col style={{ width: "14%" }} />
+            <col style={{ width: "4%"  }} /> {/* chevron */}
+            <col style={{ width: "26%" }} />
+            <col style={{ width: "17%" }} />
+            <col style={{ width: "13%" }} />
             <col style={{ width: "16%" }} />
             <col style={{ width: "12%" }} />
             <col style={{ width: "12%" }} />
           </colgroup>
           <thead className="bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-sm">
             <tr>
+              <th className="px-2 py-3 w-4" /> {/* chevron column — no label */}
               <th
                 className={`px-4 py-3 select-none transition-colors ${
                   isAtlasSearch ? "text-gray-400 dark:text-gray-500" : "cursor-pointer hover:text-blue-600 dark:hover:text-blue-400"
@@ -465,6 +467,7 @@ export default function Books() {
             {showSkeleton
               ? [...Array(skeletonRows)].map((_, i) => (
                 <tr key={i}>
+                  <td className="px-2 py-3" />
                   {[...Array(6)].map((_, j) => (
                     <td key={j} className="px-4 py-3">
                       <div className="h-4 w-24 rounded-lg bg-gray-200 dark:bg-gray-700 animate-pulse" />
@@ -481,6 +484,13 @@ export default function Books() {
                       onClick={() => toggleExpand(book._id)}
                       className="hover:bg-gray-50 dark:hover:bg-gray-700 transition cursor-pointer"
                     >
+                      {/* Chevron — rotates when row is expanded */}
+                      <td className="px-2 py-3 text-gray-400 dark:text-gray-500">
+                        <ChevronDown
+                          size={15}
+                          className={`transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`}
+                        />
+                      </td>
                       <td className="px-4 py-3 text-gray-800 dark:text-gray-100 truncate font-medium">
                         {book.title}
                       </td>
@@ -539,7 +549,7 @@ export default function Books() {
                     {/* Expanded row */}
                     {isExpanded && (
                       <tr key={`${book._id}-expanded`} className="bg-gray-50 dark:bg-gray-700/50">
-                        <td colSpan={6} className="px-6 py-4 border-t border-gray-100 dark:border-gray-700">
+                        <td colSpan={7} className="px-6 py-4 border-t border-gray-100 dark:border-gray-700">
                           <div className="space-y-3">
 
                             {/* Full genre list */}
