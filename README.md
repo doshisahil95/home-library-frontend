@@ -7,16 +7,17 @@ React frontend for the Home Library app. Allows authenticated users to manage a 
 ## Features
 
 - Login with JWT authentication and automatic redirect on token expiry
-- Password reset flow — request OTP via email, validate, reset with password strength enforcement
-- Book table with expandable rows — click any row to reveal full genre list and description
+- Password reset flow — request OTP via email, validate, reset with password strength enforcement; back to login link and resend count shown on reset screen
+- Book table with expandable rows — click any row to reveal labelled genre list and description
 - Book management — add, edit, delete with per-user reading status (read, reading, want to read)
 - Sortable columns — title, author, house (disabled during Atlas Search)
 - Full-text search via Atlas Search with cursor-based prev/next pagination
-- Filter by house, genre, and reading status — collapsible filter row with active filter badge count
-- Numbered page pagination with ellipsis for regular browsing
+- Filter by house (single-select), genre (multi-select, AND semantics), and reading status — collapsible 3-column filter panel with active filter badge count and dismissible filter summary tags
+- Numbered page pagination with ellipsis for regular browsing; prev/next with page indicator on mobile
 - Dashboard — total books, books by house, books by genre, per-user reading status bars, recently added
 - Light/dark theme toggle persisted to the database per user
 - Collapsible desktop sidebar, slide-in mobile sidebar with backdrop
+- Responsive layout — book cards on mobile, full table on desktop; dashboard grids stack on mobile
 - Skeleton loading states throughout, toast notifications for all actions
 - CSP and security headers via `vercel.json`
 
@@ -125,9 +126,13 @@ Do **not** create a `.env` file for production. Set environment variables in the
 
 **Search vs browse pagination** — Regular browsing and filter-only queries use offset pagination (numbered pages) via Mongoose. Text search uses cursor-based pagination (prev/next only) via Atlas Search because relevance-ranked results cannot be mapped to stable page numbers.
 
-**Expandable rows** — Each book row has a chevron on the left that rotates 180° when expanded. Clicking anywhere on the row toggles the expanded panel, which shows the full genre list and description. Edit/Delete buttons use `e.stopPropagation()` to prevent accidental row expansion.
+**Expandable rows** — Each book row has a chevron on the left that rotates 180° when expanded. Clicking anywhere on the row toggles the expanded panel, which shows labelled genre chips and a labelled description. Edit/Delete buttons use `e.stopPropagation()` to prevent accidental row expansion. On mobile, books render as cards instead of table rows — the same expand/collapse behaviour applies.
 
 **Filter mode detection** — `isAtlasSearch` is true when a text query is present (routes to Atlas Search + cursor pagination). `hasFilters` is true when only dropdown filters are set (routes to Mongoose + offset pagination). Column sorting is disabled during Atlas Search since relevance ordering takes precedence.
+
+**Genre filtering** — Genre supports multi-select with AND semantics. Selected genres are sent as repeated query params (`filterGenre=Fiction&filterGenre=Horror`). The backend uses `$all` in Mongoose and multiple `equals` clauses in Atlas Search compound filters to enforce AND behaviour. Active filters are shown as dismissible tags below the search bar.
+
+**Responsive layout** — Books page shows a card list on mobile (`md:hidden`) and the full table on desktop (`hidden md:block`). The filter panel uses `grid-cols-1 sm:grid-cols-3` so it stacks on mobile. Pagination shows a compact `page / total` indicator on mobile instead of numbered buttons. Dashboard grids use `grid-cols-1 md:grid-cols-X` throughout so all panels stack on small screens. The Recently Added section renders a table on desktop and stacked rows on mobile.
 
 **Theme** — The active theme is stored in MongoDB per user and loaded from `localStorage` on mount to avoid a flash of the wrong theme on page load. Changes are persisted to the backend via `PATCH /users/theme`.
 
