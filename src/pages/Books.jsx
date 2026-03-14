@@ -579,7 +579,8 @@ export default function Books() {
       <div className="hidden md:block bg-white dark:bg-gray-800 rounded-2xl shadow-lg overflow-hidden">
         <table className="w-full table-fixed text-left">
           <colgroup>
-            <col style={{ width: "4%" }} /> {/* chevron */}
+            {/* chevron */}
+            <col style={{ width: "4%" }} />
             <col style={{ width: "26%" }} />
             <col style={{ width: "17%" }} />
             <col style={{ width: "13%" }} />
