@@ -134,7 +134,7 @@ export default function Layout() {
       >
         <SidebarContent isCollapsed={collapsed} currentPath={location.pathname} />
 
-        {/* Collapse toggle — right edge, vertically centred */}
+        {/* Collapse toggle — right edge, vertically centred, desktop only */}
         <button
           onClick={() => setCollapsed((c) => !c)}
           title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
@@ -147,7 +147,7 @@ export default function Layout() {
             text-gray-500 dark:text-gray-400
             hover:text-blue-600 dark:hover:text-blue-400
             hover:border-blue-400 dark:hover:border-blue-500
-            transition-colors z-10
+            transition-colors z-20
           "
         >
           {collapsed ? <ChevronRight size={12} /> : <ChevronLeft size={12} />}
@@ -172,7 +172,7 @@ export default function Layout() {
       >
         <button
           onClick={() => setMobileOpen(false)}
-          className="absolute top-4 right-4 text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-100"
+          className="absolute top-4 right-4 p-1 text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-100"
         >
           <X size={20} />
         </button>
@@ -187,7 +187,7 @@ export default function Layout() {
           <div className="flex items-center gap-3">
             <button
               onClick={() => setMobileOpen(true)}
-              className="md:hidden text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+              className="md:hidden p-1 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
             >
               <Menu size={22} />
             </button>

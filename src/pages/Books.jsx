@@ -337,8 +337,8 @@ export default function Books() {
 
       {/* Header */}
       <div className="flex justify-between items-center mt-4">
-        <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100">Books</h1>
-        <button onClick={openAddModal} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition">
+        <h1 className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-gray-100">Books</h1>
+        <button onClick={openAddModal} className="bg-blue-600 text-white px-3 py-2 md:px-4 md:py-2 rounded-lg hover:bg-blue-700 transition text-sm md:text-base">
           + Add Book
         </button>
       </div>
@@ -497,8 +497,94 @@ export default function Books() {
 
       {error && <div className="text-red-500 text-sm">{error}</div>}
 
-      {/* Table */}
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg overflow-hidden">
+      {/* ── Mobile card list (hidden on md+) ──────────────────────────────── */}
+      <div className="md:hidden space-y-3">
+        {showSkeleton
+          ? [...Array(Math.min(limit, 5))].map((_, i) => (
+            <div key={i} className="bg-white dark:bg-gray-800 rounded-xl shadow p-4 space-y-2 animate-pulse">
+              <div className="h-4 w-3/4 bg-gray-200 dark:bg-gray-700 rounded" />
+              <div className="h-3 w-1/2 bg-gray-200 dark:bg-gray-700 rounded" />
+              <div className="h-3 w-1/3 bg-gray-200 dark:bg-gray-700 rounded" />
+            </div>
+          ))
+          : books.length === 0
+            ? <div className="p-10 text-center text-gray-500 dark:text-gray-400">No books found</div>
+            : books.map((book) => {
+              const isExpanded = expandedId === book._id;
+              return (
+                <div key={book._id} className="bg-white dark:bg-gray-800 rounded-xl shadow overflow-hidden">
+                  {/* Card header — tappable */}
+                  <div
+                    onClick={() => toggleExpand(book._id)}
+                    className="flex items-start justify-between p-4 cursor-pointer"
+                  >
+                    <div className="flex-1 min-w-0 pr-3">
+                      <p className="font-semibold text-gray-800 dark:text-gray-100 truncate">{book.title}</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400 truncate mt-0.5">{book.author}</p>
+                      <div className="flex flex-wrap items-center gap-2 mt-2">
+                        <span className="text-xs text-gray-500 dark:text-gray-400">{book.house}</span>
+                        {book.userStatus && (
+                          <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${STATUS_STYLES[book.userStatus]}`}>
+                            {STATUS_LABELS[book.userStatus]}
+                          </span>
+                        )}
+                        {book.genre?.length > 0 && (
+                          <span className="px-2 py-0.5 text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-full">
+                            {book.genre[0]}{book.genre.length > 1 ? ` +${book.genre.length - 1}` : ""}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <ChevronDown
+                      size={16}
+                      className={`shrink-0 mt-1 text-gray-400 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`}
+                    />
+                  </div>
+
+                  {/* Expanded panel */}
+                  {isExpanded && (
+                    <div className="border-t border-gray-100 dark:border-gray-700 px-4 py-3 space-y-3 bg-gray-50 dark:bg-gray-700/50">
+                      {book.genre?.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-xs font-semibold text-gray-400 dark:text-gray-500 mr-1">Genres:</span>
+                          {book.genre.map((g, idx) => (
+                            <span key={idx} className="px-2 py-0.5 text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-full">
+                              {g}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {book.description && (
+                        <div>
+                          <span className="text-xs font-semibold text-gray-400 dark:text-gray-500">Description:</span>
+                          <p className="text-sm text-gray-700 dark:text-gray-300 mt-1 leading-relaxed">{book.description}</p>
+                        </div>
+                      )}
+                      <div className="flex gap-2 pt-1">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); openEditModal(book); }}
+                          className="flex-1 px-3 py-2 text-xs bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 text-center"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          disabled={deletingId === book._id}
+                          onClick={(e) => { e.stopPropagation(); openDeleteModal(book); }}
+                          className="flex-1 px-3 py-2 text-xs bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-50 text-center"
+                        >
+                          {deletingId === book._id ? "Deleting..." : "Delete"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })
+        }
+      </div>
+
+      {/* ── Desktop table (hidden on mobile) ──────────────────────────────── */}
+      <div className="hidden md:block bg-white dark:bg-gray-800 rounded-2xl shadow-lg overflow-hidden">
         <table className="w-full table-fixed text-left">
           <colgroup>
             <col style={{ width: "4%" }} /> {/* chevron */}
@@ -660,14 +746,16 @@ export default function Books() {
       </div>
 
       {/* Pagination */}
-      <div className="flex items-center justify-between mt-2 gap-4">
+      <div className="flex items-center justify-between mt-2 gap-2 md:gap-4">
 
-        <div className="w-32 text-sm text-gray-500 dark:text-gray-400">
+        {/* Left: total count — hidden on mobile */}
+        <div className="hidden md:block w-32 text-sm text-gray-500 dark:text-gray-400">
           {!isAtlasSearch && totalBooks > 0 && (
             <span>{totalBooks} {totalBooks === 1 ? "book" : "books"}</span>
           )}
         </div>
 
+        {/* Centre: page numbers (desktop) / prev+next (mobile) */}
         <div className="flex items-center gap-1">
           {!isAtlasSearch && totalPages > 1 && (
             <>
@@ -675,19 +763,26 @@ export default function Books() {
                 className="px-3 py-2 rounded-lg bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 disabled:opacity-50 transition text-sm">
                 ←
               </button>
-              {buildPageNumbers(currentPage, totalPages).map((page, idx) =>
-                page === "..." ? (
-                  <span key={`e-${idx}`} className="px-2 py-2 text-gray-400 text-sm">…</span>
-                ) : (
-                  <button key={page} disabled={isPaging} onClick={() => goToPage(page)}
-                    className={`px-3 py-2 rounded-lg transition text-sm ${page === currentPage
-                      ? "bg-blue-600 text-white font-semibold"
-                      : "bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-500"
-                      } disabled:opacity-50`}>
-                    {page}
-                  </button>
-                )
-              )}
+              {/* Page numbers — desktop only */}
+              <div className="hidden md:flex items-center gap-1">
+                {buildPageNumbers(currentPage, totalPages).map((page, idx) =>
+                  page === "..." ? (
+                    <span key={`e-${idx}`} className="px-2 py-2 text-gray-400 text-sm">…</span>
+                  ) : (
+                    <button key={page} disabled={isPaging} onClick={() => goToPage(page)}
+                      className={`px-3 py-2 rounded-lg transition text-sm ${page === currentPage
+                        ? "bg-blue-600 text-white font-semibold"
+                        : "bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-500"
+                        } disabled:opacity-50`}>
+                      {page}
+                    </button>
+                  )
+                )}
+              </div>
+              {/* Page indicator — mobile only */}
+              <span className="md:hidden text-sm text-gray-500 dark:text-gray-400 px-2">
+                {currentPage} / {totalPages}
+              </span>
               <button disabled={currentPage === totalPages || isPaging} onClick={() => goToPage(currentPage + 1)}
                 className="px-3 py-2 rounded-lg bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 disabled:opacity-50 transition text-sm">
                 →
@@ -725,8 +820,9 @@ export default function Books() {
           )}
         </div>
 
-        <div className="flex items-center gap-2 w-32 justify-end">
-          <span className="text-sm text-gray-600 dark:text-gray-300 whitespace-nowrap">Per page</span>
+        {/* Right: per page */}
+        <div className="flex items-center gap-2 justify-end">
+          <span className="hidden md:inline text-sm text-gray-600 dark:text-gray-300 whitespace-nowrap">Per page</span>
           <select
             value={limit}
             onChange={(e) => {
@@ -754,7 +850,7 @@ export default function Books() {
 
       {/* ADD / EDIT MODAL */}
       {showModal && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50" onClick={closeModal}>
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50 px-4" onClick={closeModal}>
           <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-xl font-bold mb-4 text-gray-800 dark:text-gray-100">
               {isEditing ? "Edit Book" : "Add Book"}
@@ -856,7 +952,7 @@ export default function Books() {
 
       {/* DELETE MODAL */}
       {showDeleteModal && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50" onClick={() => setShowDeleteModal(false)}>
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50 px-4" onClick={() => setShowDeleteModal(false)}>
           <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-sm shadow-xl" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-bold mb-4 text-gray-800 dark:text-gray-100">Delete Book</h3>
             <p className="text-gray-600 dark:text-gray-300 mb-6 text-sm">

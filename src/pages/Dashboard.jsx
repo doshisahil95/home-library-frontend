@@ -5,7 +5,7 @@ function StatCard({ title, value, color }) {
   return (
     <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg">
       <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200">{title}</h2>
-      <p className={`text-4xl font-bold mt-2 ${color}`}>{value ?? "—"}</p>
+      <p className={`text-3xl md:text-4xl font-bold mt-2 ${color}`}>{value ?? "—"}</p>
     </div>
   );
 }
@@ -14,7 +14,7 @@ function BarRow({ label, count, max }) {
   const pct = max > 0 ? Math.round((count / max) * 100) : 0;
   return (
     <div className="flex items-center gap-3">
-      <span className="w-32 text-sm text-gray-600 dark:text-gray-300 truncate shrink-0">{label}</span>
+      <span className="w-24 md:w-32 text-sm text-gray-600 dark:text-gray-300 truncate shrink-0">{label}</span>
       <div className="flex-1 bg-gray-100 dark:bg-gray-700 rounded-full h-3 overflow-hidden">
         <div className="h-3 rounded-full bg-blue-500 transition-all duration-500" style={{ width: `${pct}%` }} />
       </div>
@@ -48,21 +48,21 @@ function SkeletonBlock() {
 }
 
 const STATUS_STYLES = {
-  "read":         { bar: "bg-green-500",  label: "text-green-600 dark:text-green-400" },
-  "reading":      { bar: "bg-yellow-500", label: "text-yellow-600 dark:text-yellow-400" },
-  "want to read": { bar: "bg-blue-500",   label: "text-blue-600 dark:text-blue-400" },
+  "read": { bar: "bg-green-500", label: "text-green-600 dark:text-green-400" },
+  "reading": { bar: "bg-yellow-500", label: "text-yellow-600 dark:text-yellow-400" },
+  "want to read": { bar: "bg-blue-500", label: "text-blue-600 dark:text-blue-400" },
 };
 
 const STATUS_LABELS = {
-  "read":         "Read",
-  "reading":      "Reading",
+  "read": "Read",
+  "reading": "Reading",
   "want to read": "Want to Read",
 };
 
 export default function Dashboard() {
-  const [stats, setStats]       = useState(null);
-  const [loading, setLoading]   = useState(true);
-  const [error, setError]       = useState("");
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [userName, setUserName] = useState("");
 
   useEffect(() => {
@@ -95,9 +95,9 @@ export default function Dashboard() {
           <><SkeletonCard /><SkeletonCard /><SkeletonCard /></>
         ) : (
           <>
-            <StatCard title="Total Books" value={stats?.totalBooks}      color="text-blue-600" />
-            <StatCard title="Houses"      value={stats?.byHouse?.length} color="text-green-600" />
-            <StatCard title="Genres"      value={stats?.byGenre?.length} color="text-purple-600" />
+            <StatCard title="Total Books" value={stats?.totalBooks} color="text-blue-600" />
+            <StatCard title="Houses" value={stats?.byHouse?.length} color="text-green-600" />
+            <StatCard title="Genres" value={stats?.byGenre?.length} color="text-purple-600" />
           </>
         )}
       </div>
@@ -167,30 +167,48 @@ export default function Dashboard() {
           <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg md:col-span-2">
             <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200 mb-4">Recently Added</h2>
             {stats?.recentBooks?.length > 0 ? (
-              <table className="min-w-full text-left">
-                <thead>
-                  <tr className="text-sm text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
-                    <th className="pb-2 font-medium w-2/5">Title</th>
-                    <th className="pb-2 font-medium w-1/5">Author</th>
-                    <th className="pb-2 font-medium w-1/5">House</th>
-                    <th className="pb-2 font-medium w-1/5 text-right">Added</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+              <>
+                {/* Desktop — table */}
+                <table className="hidden md:table min-w-full text-left">
+                  <thead>
+                    <tr className="text-sm text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                      <th className="pb-2 font-medium w-2/5">Title</th>
+                      <th className="pb-2 font-medium w-1/5">Author</th>
+                      <th className="pb-2 font-medium w-1/5">House</th>
+                      <th className="pb-2 font-medium w-1/5 text-right">Added</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                    {stats.recentBooks.map((book) => (
+                      <tr key={book._id} className="text-sm">
+                        <td className="py-3 text-gray-800 dark:text-gray-100 truncate max-w-0 w-2/5 pr-4">{book.title}</td>
+                        <td className="py-3 text-gray-600 dark:text-gray-300 truncate">{book.author}</td>
+                        <td className="py-3 text-gray-600 dark:text-gray-300 truncate">{book.house}</td>
+                        <td className="py-3 text-gray-400 dark:text-gray-500 text-right whitespace-nowrap">
+                          {new Date(book.createdAt).toLocaleDateString(undefined, {
+                            day: "numeric", month: "short", year: "numeric"
+                          })}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                {/* Mobile — stacked rows */}
+                <div className="md:hidden divide-y divide-gray-100 dark:divide-gray-700">
                   {stats.recentBooks.map((book) => (
-                    <tr key={book._id} className="text-sm">
-                      <td className="py-3 text-gray-800 dark:text-gray-100 truncate max-w-0 w-2/5 pr-4">{book.title}</td>
-                      <td className="py-3 text-gray-600 dark:text-gray-300 truncate">{book.author}</td>
-                      <td className="py-3 text-gray-600 dark:text-gray-300 truncate">{book.house}</td>
-                      <td className="py-3 text-gray-400 dark:text-gray-500 text-right whitespace-nowrap">
+                    <div key={book._id} className="py-3 space-y-0.5">
+                      <p className="text-sm font-medium text-gray-800 dark:text-gray-100 truncate">{book.title}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{book.author} · {book.house}</p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500">
                         {new Date(book.createdAt).toLocaleDateString(undefined, {
                           day: "numeric", month: "short", year: "numeric"
                         })}
-                      </td>
-                    </tr>
+                      </p>
+                    </div>
                   ))}
-                </tbody>
-              </table>
+                </div>
+              </>
             ) : <p className="text-gray-400 text-sm">No books added yet</p>}
           </div>
         )}

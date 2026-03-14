@@ -228,7 +228,7 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900 px-4">
-      <div className="w-full max-w-md bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-xl space-y-6">
+      <div className="w-full max-w-md bg-white dark:bg-gray-800 p-6 md:p-8 rounded-2xl shadow-xl space-y-6">
 
         <h1 className="text-2xl font-bold text-center text-gray-800 dark:text-gray-100">
           Home Library
@@ -379,20 +379,28 @@ export default function Login() {
               <RuleItem valid={passwordsMatch} text="Passwords match" />
             </div>
 
-            {/* Resend OTP */}
-            <div className="text-center text-xs text-gray-500 dark:text-gray-400">
-              {resendAttempts >= 3 ? (
-                "Maximum resend attempts reached."
-              ) : canResend ? (
-                <span
-                  onClick={handleResendOTP}
-                  className="cursor-pointer text-blue-600 dark:text-blue-400 hover:underline"
-                >
-                  {resendLoading ? "Resending OTP..." : "Resend OTP"}
-                </span>
-              ) : (
-                `Resend available in ${resendTimer}s`
-              )}
+            {/* Resend OTP + back to login */}
+            <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+              <div>
+                {resendAttempts >= 3 ? (
+                  "Maximum resend attempts reached."
+                ) : canResend ? (
+                  <span
+                    onClick={handleResendOTP}
+                    className="cursor-pointer text-blue-600 dark:text-blue-400 hover:underline"
+                  >
+                    {resendLoading ? "Resending..." : `Resend OTP (${3 - resendAttempts} left)`}
+                  </span>
+                ) : (
+                  `Resend in ${resendTimer}s · ${3 - resendAttempts} left`
+                )}
+              </div>
+              <span
+                onClick={() => switchMode("login")}
+                className="cursor-pointer text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                Back to login
+              </span>
             </div>
 
             <button
