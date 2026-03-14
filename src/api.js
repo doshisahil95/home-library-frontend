@@ -2,6 +2,17 @@
 // Set VITE_API_BASE in .env.local for local dev and in Vercel dashboard for production.
 const BASE_URL = import.meta.env.VITE_API_BASE || "http://localhost:3000";
 
+// Sanity check — Vite bakes env vars at build time so a missing VITE_API_BASE
+// won't throw at runtime; it silently falls back to localhost and fails in
+// production with a confusing CORS or network error. Warn loudly instead.
+if (!import.meta.env.VITE_API_BASE) {
+    console.error(
+        "[api.js] VITE_API_BASE is not set. " +
+        "API calls will fall back to http://localhost:3000. " +
+        "Set VITE_API_BASE in .env.local for development or in the Vercel dashboard for production."
+    );
+}
+
 function getAuthHeaders() {
     const token = localStorage.getItem("token");
     const headers = { "Content-Type": "application/json" };
@@ -53,10 +64,17 @@ export function resetPassword(body) { return publicRequest("/reset-password", bo
 
 // ─── Books ────────────────────────────────────────────────────────────────────
 
+// Appends house, genre (multi-value), and status filter params to a URLSearchParams.
+// Shared by fetchBooks and searchBooks — single source of truth for filter param names.
+function appendFilters(params, filters) {
+    if (filters.house) params.append("filterHouse", filters.house);
+    if (filters.genres?.length) {
+        filters.genres.forEach((g) => params.append("filterGenre", g));
+    }
+    if (filters.status) params.append("filterStatus", filters.status);
+}
+
 // Page-based pagination for regular browsing and filter-only queries.
-// Filters are only appended when non-empty — backend ignores absent params.
-// filterGenre is an array — each value appended as a separate param so the
-// backend receives repeated keys: filterGenre=Fiction&filterGenre=Horror
 export function fetchBooks(limit, page = 1, sortBy = null, sortOrder = "asc", filters = {}, signal) {
     const params = new URLSearchParams({ limit, page });
 
@@ -65,14 +83,7 @@ export function fetchBooks(limit, page = 1, sortBy = null, sortOrder = "asc", fi
         params.append("sortOrder", sortOrder);
     }
 
-    if (filters.house) params.append("filterHouse", filters.house);
-
-    // genres is an array — append each value separately
-    if (filters.genres?.length) {
-        filters.genres.forEach((g) => params.append("filterGenre", g));
-    }
-
-    if (filters.status) params.append("filterStatus", filters.status);
+    appendFilters(params, filters);
 
     return request(`/fetchAllBooks?${params}`, { signal });
 }
@@ -83,14 +94,7 @@ export function searchBooks(query, filters = {}, limit, cursor, signal) {
     const params = new URLSearchParams({ limit });
 
     if (query) params.append("q", query);
-    if (filters.house) params.append("filterHouse", filters.house);
-
-    // genres is an array — append each value separately
-    if (filters.genres?.length) {
-        filters.genres.forEach((g) => params.append("filterGenre", g));
-    }
-
-    if (filters.status) params.append("filterStatus", filters.status);
+    appendFilters(params, filters);
     if (cursor) params.append("searchAfter", JSON.stringify(cursor));
 
     return request(`/searchBooks?${params}`, { signal });

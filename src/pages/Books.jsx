@@ -1,8 +1,11 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Filter, ChevronDown } from "lucide-react";
 import toast from "react-hot-toast";
 import housesData from "../data/houses.json";
 import genresData from "../data/genres.json";
+import BookModal from "../components/BookModal";
+import DeleteModal from "../components/DeleteModal";
+import { STATUSES, STATUS_STYLES, STATUS_LABELS } from "../data/bookConstants";
 import {
   fetchBooks as apiFetchBooks,
   addBook,
@@ -12,19 +15,6 @@ import {
 } from "../api";
 
 const EMPTY_FORM = { title: "", author: "", house: "", genre: [], description: "", userStatus: null };
-const STATUSES = ["read", "reading", "want to read"];
-
-const STATUS_STYLES = {
-  "read": "bg-green-100  dark:bg-green-900  text-green-700  dark:text-green-300",
-  "reading": "bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300",
-  "want to read": "bg-blue-100   dark:bg-blue-900   text-blue-700   dark:text-blue-300",
-};
-
-const STATUS_LABELS = {
-  "read": "Read",
-  "reading": "Reading",
-  "want to read": "Want to read",
-};
 
 // Outside component — stable identity
 function SortIcon({ field, sortBy, sortOrder, disabled }) {
@@ -99,7 +89,10 @@ export default function Books() {
   const hasFilters = !!filterHouse || filterGenres.length > 0 || !!filterStatus;
   const isSearchActive = isAtlasSearch || hasFilters;
 
-  const activeFilters = { house: filterHouse, genres: filterGenres, status: filterStatus };
+  const activeFilters = useMemo(
+    () => ({ house: filterHouse, genres: filterGenres, status: filterStatus }),
+    [filterHouse, filterGenres, filterStatus]
+  );
 
   const activeFilterCount = [filterHouse, filterStatus].filter(Boolean).length + filterGenres.length;
 
@@ -169,7 +162,16 @@ export default function Books() {
     }
   }, [limit]);
 
-  // ─── Initial Load ─────────────────────────────────────────────────────────
+  // ─── Refresh after mutation (add / edit / delete) ────────────────────────
+  // Single source of truth — avoids repeating the search-vs-browse branch
+  // in handleSubmit, confirmDelete, etc.
+
+  const refreshBooks = useCallback(() => {
+    if (search.trim()) {
+      return fetchSearch(search, activeFilters);
+    }
+    return fetchBooks(1, false, null, sortBy, sortOrder, activeFilters);
+  }, [search, activeFilters, sortBy, sortOrder, fetchSearch, fetchBooks]);
 
   useEffect(() => {
     if (hasMounted.current) return;
@@ -256,12 +258,7 @@ export default function Books() {
         await addBook(payload);
         toast.success("Book added");
       }
-      const filters = { house: filterHouse, genres: filterGenres, status: filterStatus };
-      if (search.trim()) {
-        await fetchSearch(search, filters);
-      } else {
-        await fetchBooks(1, false, null, sortBy, sortOrder, filters);
-      }
+      await refreshBooks();
       closeModal();
     } catch (err) {
       const msg = err.message || "Operation failed";
@@ -314,12 +311,7 @@ export default function Books() {
     try {
       await deleteBook(id);
       toast.success("Book deleted");
-      const filters = { house: filterHouse, genres: filterGenres, status: filterStatus };
-      if (search.trim()) {
-        await fetchSearch(search, filters);
-      } else {
-        await fetchBooks(1, false, null, sortBy, sortOrder, filters);
-      }
+      await refreshBooks();
     } catch (err) {
       toast.error(err.message || "Delete failed");
     } finally {
@@ -848,120 +840,23 @@ export default function Books() {
         </div>
       </div>
 
-      {/* ADD / EDIT MODAL */}
       {showModal && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50 px-4" onClick={closeModal}>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-xl font-bold mb-4 text-gray-800 dark:text-gray-100">
-              {isEditing ? "Edit Book" : "Add Book"}
-            </h2>
-
-            {modalError && <div className="text-red-500 text-sm mb-3">{modalError}</div>}
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <input type="text" placeholder="Title" value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                className="w-full px-4 py-2 rounded-lg border dark:bg-gray-700 dark:text-white text-sm" />
-
-              <input type="text" placeholder="Author" value={formData.author}
-                onChange={(e) => setFormData({ ...formData, author: e.target.value })}
-                className="w-full px-4 py-2 rounded-lg border dark:bg-gray-700 dark:text-white text-sm" />
-
-              <div>
-                <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Select House</label>
-                <div className="flex flex-wrap gap-2">
-                  {housesData.map((house) => (
-                    <button type="button" key={house} onClick={() => setFormData({ ...formData, house })}
-                      className={`px-3 py-1 rounded-full text-sm ${formData.house === house
-                        ? "bg-green-600 text-white"
-                        : "bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200"}`}>
-                      {house}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Select Genre</label>
-                <div className="flex flex-wrap gap-2">
-                  {genresData.map((genre) => {
-                    const isSelected = formData.genre.includes(genre);
-                    return (
-                      <button type="button" key={genre}
-                        onClick={() => setFormData({
-                          ...formData,
-                          genre: isSelected ? formData.genre.filter((g) => g !== genre) : [...formData.genre, genre]
-                        })}
-                        className={`px-3 py-1 rounded-full text-sm ${isSelected
-                          ? "bg-blue-600 text-white"
-                          : "bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200"}`}>
-                        {genre}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div>
-                <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Description</label>
-                <textarea
-                  placeholder="Add a note or description..."
-                  value={formData.description}
-                  onChange={(e) => { if (e.target.value.length <= 1000) setFormData({ ...formData, description: e.target.value }); }}
-                  rows={3}
-                  className="w-full px-4 py-2 rounded-lg border dark:bg-gray-700 dark:text-white resize-none text-sm"
-                />
-                <div className="text-right text-xs text-gray-400 mt-1">{formData.description?.length || 0} / 1000</div>
-              </div>
-
-              <div>
-                <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">My Status</label>
-                <div className="flex flex-wrap gap-2">
-                  {STATUSES.map((s) => (
-                    <button type="button" key={s}
-                      onClick={() => setFormData({ ...formData, userStatus: formData.userStatus === s ? null : s })}
-                      className={`px-3 py-1 rounded-full text-sm ${formData.userStatus === s
-                        ? STATUS_STYLES[s] + " ring-2 ring-offset-1 ring-current"
-                        : "bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200"}`}>
-                      {STATUS_LABELS[s]}
-                    </button>
-                  ))}
-                </div>
-                {formData.userStatus && (
-                  <button type="button" onClick={() => setFormData({ ...formData, userStatus: null })}
-                    className="mt-2 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 underline">
-                    Clear status
-                  </button>
-                )}
-              </div>
-
-              <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={closeModal} className="px-4 py-2 rounded-lg bg-gray-300 dark:bg-gray-600 dark:text-white text-sm">Cancel</button>
-                <button type="submit" className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-sm">
-                  {isEditing ? "Update Book" : "Add Book"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <BookModal
+          isEditing={isEditing}
+          formData={formData}
+          setFormData={setFormData}
+          modalError={modalError}
+          onSubmit={handleSubmit}
+          onClose={closeModal}
+        />
       )}
 
-      {/* DELETE MODAL */}
       {showDeleteModal && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50 px-4" onClick={() => setShowDeleteModal(false)}>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-sm shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-bold mb-4 text-gray-800 dark:text-gray-100">Delete Book</h3>
-            <p className="text-gray-600 dark:text-gray-300 mb-6 text-sm">
-              Are you sure you want to delete{" "}
-              <span className="font-semibold text-gray-800 dark:text-gray-100">{deletingBookTitle}</span>?
-              {" "}This action cannot be undone.
-            </p>
-            <div className="flex justify-end gap-3">
-              <button onClick={() => setShowDeleteModal(false)} className="px-4 py-2 rounded-lg bg-gray-300 dark:bg-gray-600 dark:text-white text-sm">Cancel</button>
-              <button onClick={confirmDelete} className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 text-sm">Delete</button>
-            </div>
-          </div>
-        </div>
+        <DeleteModal
+          bookTitle={deletingBookTitle}
+          onConfirm={confirmDelete}
+          onClose={() => setShowDeleteModal(false)}
+        />
       )}
     </div>
   );
