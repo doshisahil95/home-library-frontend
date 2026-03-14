@@ -902,42 +902,38 @@ export default function Books() {
                 </div>
               </div>
 
-              {isEditing && (
-                <div>
-                  <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Description</label>
-                  <textarea
-                    placeholder="Add a note or description..."
-                    value={formData.description}
-                    onChange={(e) => { if (e.target.value.length <= 1000) setFormData({ ...formData, description: e.target.value }); }}
-                    rows={3}
-                    className="w-full px-4 py-2 rounded-lg border dark:bg-gray-700 dark:text-white resize-none text-sm"
-                  />
-                  <div className="text-right text-xs text-gray-400 mt-1">{formData.description?.length || 0} / 1000</div>
-                </div>
-              )}
+              <div>
+                <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Description</label>
+                <textarea
+                  placeholder="Add a note or description..."
+                  value={formData.description}
+                  onChange={(e) => { if (e.target.value.length <= 1000) setFormData({ ...formData, description: e.target.value }); }}
+                  rows={3}
+                  className="w-full px-4 py-2 rounded-lg border dark:bg-gray-700 dark:text-white resize-none text-sm"
+                />
+                <div className="text-right text-xs text-gray-400 mt-1">{formData.description?.length || 0} / 1000</div>
+              </div>
 
-              {isEditing && (
-                <div>
-                  <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">My Status</label>
-                  <div className="flex flex-wrap gap-2">
-                    {STATUSES.map((s) => (
-                      <button type="button" key={s}
-                        onClick={() => setFormData({ ...formData, userStatus: formData.userStatus === s ? null : s })}
-                        className={`px-3 py-1 rounded-full text-sm ${formData.userStatus === s
-                          ? STATUS_STYLES[s] + " ring-2 ring-offset-1 ring-current"
-                          : "bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200"}`}>
-                        {STATUS_LABELS[s]}
-                      </button>
-                    ))}
-                  </div>
-                  {formData.userStatus && (
-                    <button type="button" onClick={() => setFormData({ ...formData, userStatus: null })}
-                      className="mt-2 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 underline">
-                      Clear status
+              <div>
+                <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">My Status</label>
+                <div className="flex flex-wrap gap-2">
+                  {STATUSES.map((s) => (
+                    <button type="button" key={s}
+                      onClick={() => setFormData({ ...formData, userStatus: formData.userStatus === s ? null : s })}
+                      className={`px-3 py-1 rounded-full text-sm ${formData.userStatus === s
+                        ? STATUS_STYLES[s] + " ring-2 ring-offset-1 ring-current"
+                        : "bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200"}`}>
+                      {STATUS_LABELS[s]}
                     </button>
-                  )}
+                  ))}
                 </div>
-              )}
+                {formData.userStatus && (
+                  <button type="button" onClick={() => setFormData({ ...formData, userStatus: null })}
+                    className="mt-2 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 underline">
+                    Clear status
+                  </button>
+                )}
+              </div>
 
               <div className="flex justify-end gap-3 pt-2">
                 <button type="button" onClick={closeModal} className="px-4 py-2 rounded-lg bg-gray-300 dark:bg-gray-600 dark:text-white text-sm">Cancel</button>
