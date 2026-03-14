@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Eye, EyeOff, CheckCircle, XCircle } from "lucide-react";
+import toast from "react-hot-toast";
 import { loginUser, sendResetOTP, resetPassword as apiResetPassword } from "../api";
 
 // Defined outside component for stable identity
@@ -213,8 +214,7 @@ export default function Login() {
 
       await apiResetPassword({ email, otp, newPassword });
 
-      setMessage("Password reset successful.");
-      // Clear sensitive fields before returning to login
+      toast.success("Password reset successful. Please log in.");
       setOtp("");
       setNewPassword("");
       setConfirmPassword("");
