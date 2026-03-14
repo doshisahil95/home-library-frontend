@@ -12,17 +12,17 @@ import {
 } from "../api";
 
 const EMPTY_FORM = { title: "", author: "", house: "", genre: [], description: "", userStatus: null };
-const STATUSES   = ["read", "reading", "want to read"];
+const STATUSES = ["read", "reading", "want to read"];
 
 const STATUS_STYLES = {
-  "read":         "bg-green-100  dark:bg-green-900  text-green-700  dark:text-green-300",
-  "reading":      "bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300",
+  "read": "bg-green-100  dark:bg-green-900  text-green-700  dark:text-green-300",
+  "reading": "bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300",
   "want to read": "bg-blue-100   dark:bg-blue-900   text-blue-700   dark:text-blue-300",
 };
 
 const STATUS_LABELS = {
-  "read":         "Read",
-  "reading":      "Reading",
+  "read": "Read",
+  "reading": "Reading",
   "want to read": "Want to read",
 };
 
@@ -36,7 +36,7 @@ function buildPageNumbers(currentPage, totalPages) {
   if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
   const pages = [];
   const delta = 2;
-  const left  = currentPage - delta;
+  const left = currentPage - delta;
   const right = currentPage + delta;
   pages.push(1);
   if (left > 2) pages.push("...");
@@ -47,61 +47,61 @@ function buildPageNumbers(currentPage, totalPages) {
 }
 
 export default function Books() {
-  const [books, setBooks]               = useState([]);
+  const [books, setBooks] = useState([]);
   const [showSkeleton, setShowSkeleton] = useState(true);
-  const [isPaging, setIsPaging]         = useState(false);
-  const [error, setError]               = useState("");
-  const [modalError, setModalError]     = useState("");
+  const [isPaging, setIsPaging] = useState(false);
+  const [error, setError] = useState("");
+  const [modalError, setModalError] = useState("");
 
   // Search & filters
-  const [search, setSearch]             = useState("");
-  const [filterHouse, setFilterHouse]   = useState("");
-  const [filterGenre, setFilterGenre]   = useState("");
+  const [search, setSearch] = useState("");
+  const [filterHouse, setFilterHouse] = useState("");
+  const [filterGenres, setFilterGenres] = useState([]); // array — AND semantics
   const [filterStatus, setFilterStatus] = useState("");
-  const [filtersOpen, setFiltersOpen]   = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   // Sort (browse mode only)
-  const [sortBy, setSortBy]       = useState(null);
+  const [sortBy, setSortBy] = useState(null);
   const [sortOrder, setSortOrder] = useState("asc");
 
   // Browse pagination
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages]   = useState(1);
-  const [totalBooks, setTotalBooks]   = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalBooks, setTotalBooks] = useState(0);
 
   // Search cursor pagination
-  const [searchCursor, setSearchCursor]           = useState(null);
+  const [searchCursor, setSearchCursor] = useState(null);
   const [searchPrevCursors, setSearchPrevCursors] = useState([]);
 
   // Expanded row
   const [expandedId, setExpandedId] = useState(null);
 
   // Modals
-  const [showModal, setShowModal]             = useState(false);
+  const [showModal, setShowModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [isEditing, setIsEditing]             = useState(false);
-  const [currentId, setCurrentId]             = useState(null);
-  const [deletingId, setDeletingId]           = useState(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [currentId, setCurrentId] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
   const [deletingBookTitle, setDeletingBookTitle] = useState("");
 
-  const [limit, setLimit]       = useState(10);
+  const [limit, setLimit] = useState(10);
   const [formData, setFormData] = useState(EMPTY_FORM);
 
   const debounceTimer = useRef(null);
-  const hasMounted    = useRef(false);
-  const initialLoad   = useRef(true);
-  const abortRef      = useRef(null);
+  const hasMounted = useRef(false);
+  const initialLoad = useRef(true);
+  const abortRef = useRef(null);
 
   // isAtlasSearch  = text query present → Atlas Search + cursor pagination
   // hasFilters     = dropdown filters only → Mongoose query + offset pagination
   // isSearchActive = either → used for UI state (filter badge, reset button)
-  const isAtlasSearch  = search.trim() !== "";
-  const hasFilters     = !!filterHouse || !!filterGenre || !!filterStatus;
+  const isAtlasSearch = search.trim() !== "";
+  const hasFilters = !!filterHouse || filterGenres.length > 0 || !!filterStatus;
   const isSearchActive = isAtlasSearch || hasFilters;
 
-  const activeFilters = { house: filterHouse, genre: filterGenre, status: filterStatus };
+  const activeFilters = { house: filterHouse, genres: filterGenres, status: filterStatus };
 
-  const activeFilterCount = [filterHouse, filterGenre, filterStatus].filter(Boolean).length;
+  const activeFilterCount = [filterHouse, filterStatus].filter(Boolean).length + filterGenres.length;
 
   // ─── Fetch Books (browse + filter mode) ──────────────────────────────────
 
@@ -183,7 +183,7 @@ export default function Books() {
     if (initialLoad.current) return;
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
     debounceTimer.current = setTimeout(() => {
-      const filters = { house: filterHouse, genre: filterGenre, status: filterStatus };
+      const filters = { house: filterHouse, genres: filterGenres, status: filterStatus };
       setSearchCursor(null);
       setSearchPrevCursors([]);
       setExpandedId(null);
@@ -194,8 +194,7 @@ export default function Books() {
       }
     }, 250);
     return () => clearTimeout(debounceTimer.current);
-  }, [search, filterHouse, filterGenre, filterStatus]);
-
+  }, [search, filterHouse, filterGenres, filterStatus]);
   // ─── Sort ─────────────────────────────────────────────────────────────────
 
   const handleSort = (field) => {
@@ -220,12 +219,12 @@ export default function Books() {
   const handleReset = () => {
     setSearch("");
     setFilterHouse("");
-    setFilterGenre("");
+    setFilterGenres([]);
     setFilterStatus("");
     setExpandedId(null);
   };
 
-  const isResetDisabled = search === "" && !filterHouse && !filterGenre && !filterStatus;
+  const isResetDisabled = search === "" && !filterHouse && filterGenres.length === 0 && !filterStatus;
 
   // ─── Row expand toggle ────────────────────────────────────────────────────
 
@@ -245,10 +244,10 @@ export default function Books() {
       setModalError("");
       const payload = {
         ...formData,
-        title:       formData.title.trim(),
-        author:      formData.author.trim(),
+        title: formData.title.trim(),
+        author: formData.author.trim(),
         description: formData.description?.trim() || "",
-        userStatus:  formData.userStatus || null,
+        userStatus: formData.userStatus || null,
       };
       if (isEditing) {
         await updateBook(currentId, payload);
@@ -257,7 +256,7 @@ export default function Books() {
         await addBook(payload);
         toast.success("Book added");
       }
-      const filters = { house: filterHouse, genre: filterGenre, status: filterStatus };
+      const filters = { house: filterHouse, genres: filterGenres, status: filterStatus };
       if (search.trim()) {
         await fetchSearch(search, filters);
       } else {
@@ -273,12 +272,12 @@ export default function Books() {
 
   const openEditModal = (book) => {
     setFormData({
-      title:       book.title,
-      author:      book.author,
-      house:       book.house,
-      genre:       book.genre || [],
+      title: book.title,
+      author: book.author,
+      house: book.house,
+      genre: book.genre || [],
       description: book.description || "",
-      userStatus:  book.userStatus || null,
+      userStatus: book.userStatus || null,
     });
     setCurrentId(book._id);
     setIsEditing(true);
@@ -315,7 +314,7 @@ export default function Books() {
     try {
       await deleteBook(id);
       toast.success("Book deleted");
-      const filters = { house: filterHouse, genre: filterGenre, status: filterStatus };
+      const filters = { house: filterHouse, genres: filterGenres, status: filterStatus };
       if (search.trim()) {
         await fetchSearch(search, filters);
       } else {
@@ -330,6 +329,7 @@ export default function Books() {
 
   const skeletonRows = Math.min(limit, 25);
 
+
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
@@ -343,7 +343,7 @@ export default function Books() {
         </button>
       </div>
 
-      {/* Search bar + Filters toggle + Reset */}
+      {/* Search + Filters toggle + Reset */}
       <div className="flex gap-2 items-center">
         <div className="flex-1">
           <input
@@ -354,16 +354,13 @@ export default function Books() {
             className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100"
           />
         </div>
-
-        {/* Filters toggle button */}
         <button
           type="button"
           onClick={() => setFiltersOpen((o) => !o)}
-          className={`relative flex items-center gap-2 px-4 py-2 rounded-lg border transition ${
-            filtersOpen || activeFilterCount > 0
+          className={`relative flex items-center gap-2 px-4 py-2 rounded-lg border transition ${filtersOpen || activeFilterCount > 0
               ? "bg-blue-600 text-white border-blue-600"
               : "bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200"
-          }`}
+            }`}
         >
           <Filter size={16} />
           <span className="text-sm">Filters</span>
@@ -373,47 +370,128 @@ export default function Books() {
             </span>
           )}
         </button>
-
-        {/* Reset */}
         <button
           type="button"
           onClick={handleReset}
           disabled={isResetDisabled}
-          className="px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
         >
           Reset
         </button>
       </div>
 
-      {/* Filter row — collapsed by default */}
+      {/* Collapsible filter row — 3 columns: House | Genre | Status */}
       {filtersOpen && (
-        <div className="flex flex-wrap gap-2 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
-          <select
-            value={filterHouse}
-            onChange={(e) => setFilterHouse(e.target.value)}
-            className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 text-sm"
-          >
-            <option value="">All Houses</option>
-            {housesData.map((h) => <option key={h} value={h}>{h}</option>)}
-          </select>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
 
-          <select
-            value={filterGenre}
-            onChange={(e) => setFilterGenre(e.target.value)}
-            className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 text-sm"
-          >
-            <option value="">All Genres</option>
-            {genresData.map((g) => <option key={g} value={g}>{g}</option>)}
-          </select>
+          {/* House */}
+          <div className="space-y-2">
+            <span className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">House</span>
+            <div className="flex flex-wrap gap-1.5">
+              {housesData.map((h) => (
+                <button
+                  key={h}
+                  type="button"
+                  onClick={() => setFilterHouse((prev) => prev === h ? "" : h)}
+                  className={`px-2.5 py-1 rounded-full text-xs transition ${filterHouse === h
+                      ? "bg-green-600 text-white"
+                      : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+                    }`}
+                >
+                  {h}
+                </button>
+              ))}
+            </div>
+          </div>
 
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 text-sm"
-          >
-            <option value="">All Statuses</option>
-            {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
-          </select>
+          {/* Genre */}
+          <div className="space-y-2">
+            <span className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+              Genre
+              {filterGenres.length > 0 && (
+                <span className="ml-1.5 text-blue-600 dark:text-blue-400 normal-case font-normal">
+                  ({filterGenres.length} selected)
+                </span>
+              )}
+            </span>
+            <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto pr-1">
+              {genresData.map((g) => {
+                const selected = filterGenres.includes(g);
+                return (
+                  <button
+                    key={g}
+                    type="button"
+                    onClick={() =>
+                      setFilterGenres((prev) =>
+                        selected ? prev.filter((x) => x !== g) : [...prev, g]
+                      )
+                    }
+                    className={`px-2.5 py-1 rounded-full text-xs transition ${selected
+                        ? "bg-blue-600 text-white"
+                        : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+                      }`}
+                  >
+                    {g}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Status */}
+          <div className="space-y-2">
+            <span className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Status</span>
+            <div className="flex flex-wrap gap-1.5">
+              {STATUSES.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setFilterStatus((prev) => prev === s ? "" : s)}
+                  className={`px-2.5 py-1 rounded-full text-xs transition ${filterStatus === s
+                      ? `${STATUS_STYLES[s]} ring-1 ring-current`
+                      : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+                    }`}
+                >
+                  {STATUS_LABELS[s]}
+                </button>
+              ))}
+            </div>
+          </div>
+
+        </div>
+      )}
+
+      {/* Active filter summary — dismissible tags */}
+      {activeFilterCount > 0 && (
+        <div className="flex flex-wrap gap-1.5 items-center">
+          <span className="text-xs text-gray-400 dark:text-gray-500 mr-0.5">Filtering by:</span>
+
+          {filterHouse && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300">
+              House: {filterHouse}
+              <button type="button" onClick={() => setFilterHouse("")}
+                className="ml-0.5 hover:text-green-900 dark:hover:text-green-100 font-bold leading-none"
+                aria-label={`Remove house filter ${filterHouse}`}>×</button>
+            </span>
+          )}
+
+          {filterGenres.map((g) => (
+            <span key={g} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300">
+              Genre: {g}
+              <button type="button" onClick={() => setFilterGenres((prev) => prev.filter((x) => x !== g))}
+                className="ml-0.5 hover:text-blue-900 dark:hover:text-blue-100 font-bold leading-none"
+                aria-label={`Remove genre filter ${g}`}>×</button>
+            </span>
+          ))}
+
+          {filterStatus && (
+            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs ${STATUS_STYLES[filterStatus]}`}>
+              Status: {STATUS_LABELS[filterStatus]}
+              <button type="button" onClick={() => setFilterStatus("")}
+                className="ml-0.5 font-bold leading-none opacity-70 hover:opacity-100"
+                aria-label={`Remove status filter ${filterStatus}`}>×</button>
+            </span>
+          )}
         </div>
       )}
 
@@ -423,7 +501,7 @@ export default function Books() {
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg overflow-hidden">
         <table className="w-full table-fixed text-left">
           <colgroup>
-            <col style={{ width: "4%"  }} /> {/* chevron */}
+            <col style={{ width: "4%" }} /> {/* chevron */}
             <col style={{ width: "26%" }} />
             <col style={{ width: "17%" }} />
             <col style={{ width: "13%" }} />
@@ -433,27 +511,24 @@ export default function Books() {
           </colgroup>
           <thead className="bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-sm">
             <tr>
-              <th className="px-2 py-3 w-4" /> {/* chevron column — no label */}
+              <th className="px-2 py-3 w-4" />
               <th
-                className={`px-4 py-3 select-none transition-colors ${
-                  isAtlasSearch ? "text-gray-400 dark:text-gray-500" : "cursor-pointer hover:text-blue-600 dark:hover:text-blue-400"
-                }`}
+                className={`px-4 py-3 select-none transition-colors ${isAtlasSearch ? "text-gray-400 dark:text-gray-500" : "cursor-pointer hover:text-blue-600 dark:hover:text-blue-400"
+                  }`}
                 onClick={() => handleSort("title")}
               >
                 Title <SortIcon field="title" sortBy={sortBy} sortOrder={sortOrder} disabled={isAtlasSearch} />
               </th>
               <th
-                className={`px-4 py-3 select-none transition-colors ${
-                  isAtlasSearch ? "text-gray-400 dark:text-gray-500" : "cursor-pointer hover:text-blue-600 dark:hover:text-blue-400"
-                }`}
+                className={`px-4 py-3 select-none transition-colors ${isAtlasSearch ? "text-gray-400 dark:text-gray-500" : "cursor-pointer hover:text-blue-600 dark:hover:text-blue-400"
+                  }`}
                 onClick={() => handleSort("author")}
               >
                 Author <SortIcon field="author" sortBy={sortBy} sortOrder={sortOrder} disabled={isAtlasSearch} />
               </th>
               <th
-                className={`px-4 py-3 select-none transition-colors ${
-                  isAtlasSearch ? "text-gray-400 dark:text-gray-500" : "cursor-pointer hover:text-blue-600 dark:hover:text-blue-400"
-                }`}
+                className={`px-4 py-3 select-none transition-colors ${isAtlasSearch ? "text-gray-400 dark:text-gray-500" : "cursor-pointer hover:text-blue-600 dark:hover:text-blue-400"
+                  }`}
                 onClick={() => handleSort("house")}
               >
                 House <SortIcon field="house" sortBy={sortBy} sortOrder={sortOrder} disabled={isAtlasSearch} />
@@ -484,7 +559,6 @@ export default function Books() {
                       onClick={() => toggleExpand(book._id)}
                       className="hover:bg-gray-50 dark:hover:bg-gray-700 transition cursor-pointer"
                     >
-                      {/* Chevron — rotates when row is expanded */}
                       <td className="px-2 py-3 text-gray-400 dark:text-gray-500">
                         <ChevronDown
                           size={15}
@@ -551,10 +625,9 @@ export default function Books() {
                       <tr key={`${book._id}-expanded`} className="bg-gray-50 dark:bg-gray-700/50">
                         <td colSpan={7} className="px-6 py-4 border-t border-gray-100 dark:border-gray-700">
                           <div className="space-y-3">
-
-                            {/* Full genre list */}
                             {book.genre?.length > 0 && (
-                              <div className="flex flex-wrap gap-1.5">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="text-xs font-semibold text-gray-400 dark:text-gray-500 mr-1">Genres:</span>
                                 {book.genre.map((g, idx) => (
                                   <span key={idx} className="px-2 py-0.5 text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-full">
                                     {g}
@@ -562,15 +635,15 @@ export default function Books() {
                                 ))}
                               </div>
                             )}
-
-                            {/* Description */}
-                            <p className={`text-sm leading-relaxed ${
-                              book.description
-                                ? "text-gray-700 dark:text-gray-300"
-                                : "text-gray-400 dark:text-gray-500 italic"
-                            }`}>
-                              {book.description || "No description added yet."}
-                            </p>
+                            <div>
+                              <span className="text-xs font-semibold text-gray-400 dark:text-gray-500">Description:</span>
+                              <p className={`text-sm leading-relaxed mt-1 ${book.description
+                                  ? "text-gray-700 dark:text-gray-300"
+                                  : "text-gray-400 dark:text-gray-500 italic"
+                                }`}>
+                                {book.description || "No description added yet."}
+                              </p>
+                            </div>
                           </div>
                         </td>
                       </tr>
@@ -589,14 +662,12 @@ export default function Books() {
       {/* Pagination */}
       <div className="flex items-center justify-between mt-2 gap-4">
 
-        {/* Left: total count */}
         <div className="w-32 text-sm text-gray-500 dark:text-gray-400">
           {!isAtlasSearch && totalBooks > 0 && (
             <span>{totalBooks} {totalBooks === 1 ? "book" : "books"}</span>
           )}
         </div>
 
-        {/* Centre: page numbers (browse + filter mode) or prev/next (Atlas Search) */}
         <div className="flex items-center gap-1">
           {!isAtlasSearch && totalPages > 1 && (
             <>
@@ -612,7 +683,7 @@ export default function Books() {
                     className={`px-3 py-2 rounded-lg transition text-sm ${page === currentPage
                       ? "bg-blue-600 text-white font-semibold"
                       : "bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-500"
-                    } disabled:opacity-50`}>
+                      } disabled:opacity-50`}>
                     {page}
                   </button>
                 )
@@ -654,7 +725,6 @@ export default function Books() {
           )}
         </div>
 
-        {/* Right: per page */}
         <div className="flex items-center gap-2 w-32 justify-end">
           <span className="text-sm text-gray-600 dark:text-gray-300 whitespace-nowrap">Per page</span>
           <select
@@ -662,7 +732,7 @@ export default function Books() {
             onChange={(e) => {
               const newLimit = Number(e.target.value);
               setLimit(newLimit);
-              const filters = { house: filterHouse, genre: filterGenre, status: filterStatus };
+              const filters = { house: filterHouse, genres: filterGenres, status: filterStatus };
               setSearchCursor(null);
               setSearchPrevCursors([]);
               setExpandedId(null);
@@ -701,7 +771,6 @@ export default function Books() {
                 onChange={(e) => setFormData({ ...formData, author: e.target.value })}
                 className="w-full px-4 py-2 rounded-lg border dark:bg-gray-700 dark:text-white text-sm" />
 
-              {/* House */}
               <div>
                 <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Select House</label>
                 <div className="flex flex-wrap gap-2">
@@ -716,7 +785,6 @@ export default function Books() {
                 </div>
               </div>
 
-              {/* Genre */}
               <div>
                 <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Select Genre</label>
                 <div className="flex flex-wrap gap-2">
@@ -738,7 +806,6 @@ export default function Books() {
                 </div>
               </div>
 
-              {/* Description — edit only */}
               {isEditing && (
                 <div>
                   <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Description</label>
@@ -753,7 +820,6 @@ export default function Books() {
                 </div>
               )}
 
-              {/* Status — edit only */}
               {isEditing && (
                 <div>
                   <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">My Status</label>
