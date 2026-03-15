@@ -126,3 +126,7 @@ export function updateTheme(theme) {
         body: JSON.stringify({ theme }),
     });
 }
+
+export function getDiscoverData() {
+    return request("/discover");
+}

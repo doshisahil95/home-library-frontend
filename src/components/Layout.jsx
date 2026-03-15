@@ -1,12 +1,13 @@
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useState, useEffect, useRef } from "react";
-import { LayoutDashboard, BookOpen, ChevronLeft, ChevronRight, Menu, X } from "lucide-react";
+import { LayoutDashboard, BookOpen, Compass, ChevronLeft, ChevronRight, Menu, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { updateTheme as apiUpdateTheme } from "../api";
 
 const NAV_ITEMS = [
   { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { path: "/books", label: "Books", icon: BookOpen },
+  { path: "/discover", label: "Discover", icon: Compass },
 ];
 
 // Defined outside Layout so it isn't re-created on every render.
@@ -42,8 +43,8 @@ function SidebarContent({ isCollapsed, currentPath }) {
               <Icon size={18} className="shrink-0" />
               {!isCollapsed && <span className="text-sm font-medium">{label}</span>}
             </Link>
-            {/* Separator after Dashboard */}
-            {idx === 0 && (
+            {/* Separator between nav items */}
+            {idx < NAV_ITEMS.length - 1 && (
               <hr className="my-2 border-gray-200 dark:border-gray-700" />
             )}
           </div>

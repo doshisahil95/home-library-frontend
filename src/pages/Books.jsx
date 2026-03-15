@@ -5,7 +5,7 @@ import housesData from "../data/houses.json";
 import genresData from "../data/genres.json";
 import BookModal from "../components/BookModal";
 import DeleteModal from "../components/DeleteModal";
-import { STATUSES, STATUS_STYLES, STATUS_LABELS } from "../data/bookConstants";
+import { STATUSES, FILTER_STATUSES, STATUS_STYLES, STATUS_LABELS } from "../data/bookConstants";
 import {
   fetchBooks as apiFetchBooks,
   addBook,
@@ -461,7 +461,7 @@ export default function Books() {
           <div className="space-y-2">
             <span className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Status</span>
             <div className="flex flex-wrap gap-1.5">
-              {STATUSES.map((s) => (
+              {FILTER_STATUSES.map((s) => (
                 <button
                   key={s}
                   type="button"

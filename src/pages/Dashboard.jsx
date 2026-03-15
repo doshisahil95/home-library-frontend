@@ -47,41 +47,16 @@ function SkeletonBlock() {
   );
 }
 
-const STATUS_STYLES = {
-  "read": { bar: "bg-green-500", label: "text-green-600 dark:text-green-400" },
-  "reading": { bar: "bg-yellow-500", label: "text-yellow-600 dark:text-yellow-400" },
-  "want to read": { bar: "bg-blue-500", label: "text-blue-600 dark:text-blue-400" },
-};
-
-const STATUS_LABELS = {
-  "read": "Read",
-  "reading": "Reading",
-  "want to read": "Want to Read",
-};
-
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [userName, setUserName] = useState("");
-
   useEffect(() => {
-    try {
-      const user = JSON.parse(localStorage.getItem("user"));
-      if (user?.name) setUserName(user.name.split(" ")[0]);
-    } catch { /* ignore */ }
-
     getDashboardStats()
       .then((res) => setStats(res.data))
       .catch((err) => setError(err.message || "Failed to load stats"))
       .finally(() => setLoading(false));
   }, []);
-
-  const statusRows = ["read", "reading", "want to read"].map((s) => {
-    const found = stats?.byStatus?.find((b) => b.status === s);
-    return { status: s, count: found?.count || 0 };
-  });
-  const maxStatusCount = Math.max(...statusRows.map((r) => r.count), 1);
 
   return (
     <div className="space-y-6">
@@ -132,39 +107,11 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Row 3: My Reading (1/3) + Recently Added (2/3) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* Row 3: Recently Added — full width now that My Reading moved to Discover */}
+      <div className="grid grid-cols-1 gap-6">
 
-        {/* My Reading — compact, sits naturally at 1/3 width */}
         {loading ? <SkeletonBlock /> : (
           <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg">
-            <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200 mb-4">
-              {userName ? `${userName}'s Reading` : "My Reading"}
-            </h2>
-            <div className="space-y-4">
-              {statusRows.map(({ status, count }) => (
-                <div key={status} className="space-y-1">
-                  <div className="flex justify-between items-center">
-                    <span className={`text-sm font-medium ${STATUS_STYLES[status].label}`}>
-                      {STATUS_LABELS[status]}
-                    </span>
-                    <span className="text-sm text-gray-500 dark:text-gray-400">{count}</span>
-                  </div>
-                  <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
-                    <div
-                      className={`h-2 rounded-full transition-all duration-500 ${STATUS_STYLES[status].bar}`}
-                      style={{ width: `${Math.round((count / maxStatusCount) * 100)}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Recently Added — takes up 2/3 */}
-        {loading ? <SkeletonBlock /> : (
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg md:col-span-2">
             <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200 mb-4">Recently Added</h2>
             {stats?.recentBooks?.length > 0 ? (
               <>
