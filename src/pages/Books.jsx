@@ -14,7 +14,7 @@ import {
   searchBooks,
 } from "../api";
 
-const EMPTY_FORM = { title: "", author: "", house: "", genre: [], description: "", userStatus: null };
+const EMPTY_FORM = { title: "", author: "", house: "", genre: [], description: "", userStatus: null, startedAt: null, startedAtLocked: false, finishedAt: null, finishedAtLocked: false, rating: null };
 
 // Outside component — stable identity
 function SortIcon({ field, sortBy, sortOrder, disabled }) {
@@ -34,6 +34,24 @@ function buildPageNumbers(currentPage, totalPages) {
   if (right < totalPages - 1) pages.push("...");
   pages.push(totalPages);
   return pages;
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return null;
+  return new Date(dateStr).toLocaleDateString(undefined, {
+    day: "numeric", month: "short", year: "numeric",
+  });
+}
+
+function StarDisplay({ rating }) {
+  if (!rating) return null;
+  return (
+    <span className="flex items-center gap-0.5">
+      {[1, 2, 3, 4, 5].map((s) => (
+        <span key={s} className={s <= rating ? "text-yellow-400" : "text-gray-300 dark:text-gray-600"}>★</span>
+      ))}
+    </span>
+  );
 }
 
 export default function Books() {
@@ -71,6 +89,7 @@ export default function Books() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [currentId, setCurrentId] = useState(null);
+  const [currentStatus, setCurrentStatus] = useState(null); // DB status when modal opened
   const [deletingId, setDeletingId] = useState(null);
   const [deletingBookTitle, setDeletingBookTitle] = useState("");
 
@@ -275,8 +294,14 @@ export default function Books() {
       genre: book.genre || [],
       description: book.description || "",
       userStatus: book.userStatus || null,
+      startedAt: book.startedAt || null,
+      startedAtLocked: book.startedAtLocked || false,
+      finishedAt: book.finishedAt || null,
+      finishedAtLocked: book.finishedAtLocked || false,
+      rating: book.rating ?? null,
     });
     setCurrentId(book._id);
+    setCurrentStatus(book.userStatus || null);
     setIsEditing(true);
     setModalError("");
     setShowModal(true);
@@ -286,6 +311,7 @@ export default function Books() {
     setFormData(EMPTY_FORM);
     setIsEditing(false);
     setCurrentId(null);
+    setCurrentStatus(null);
     setModalError("");
     setShowModal(true);
   };
@@ -295,6 +321,7 @@ export default function Books() {
     setFormData(EMPTY_FORM);
     setIsEditing(false);
     setCurrentId(null);
+    setCurrentStatus(null);
     setModalError("");
   };
 
@@ -552,6 +579,28 @@ export default function Books() {
                           <p className="text-sm text-gray-700 dark:text-gray-300 mt-1 leading-relaxed">{book.description}</p>
                         </div>
                       )}
+                      {(book.userStatus === "reading" || book.userStatus === "read") && (
+                        <div className="flex flex-wrap gap-3">
+                          {book.startedAt && (
+                            <div>
+                              <span className="text-xs font-semibold text-gray-400 dark:text-gray-500">Started: </span>
+                              <span className="text-xs text-gray-600 dark:text-gray-300">{formatDate(book.startedAt)}</span>
+                            </div>
+                          )}
+                          {book.userStatus === "read" && book.finishedAt && (
+                            <div>
+                              <span className="text-xs font-semibold text-gray-400 dark:text-gray-500">Finished: </span>
+                              <span className="text-xs text-gray-600 dark:text-gray-300">{formatDate(book.finishedAt)}</span>
+                            </div>
+                          )}
+                          {book.userStatus === "read" && book.rating && (
+                            <div className="flex items-center gap-1">
+                              <span className="text-xs font-semibold text-gray-400 dark:text-gray-500">Rating: </span>
+                              <StarDisplay rating={book.rating} />
+                            </div>
+                          )}
+                        </div>
+                      )}
                       <div className="flex gap-2 pt-1">
                         <button
                           onClick={(e) => { e.stopPropagation(); openEditModal(book); }}
@@ -723,6 +772,28 @@ export default function Books() {
                                 {book.description || "No description added yet."}
                               </p>
                             </div>
+                            {(book.userStatus === "reading" || book.userStatus === "read") && (
+                              <div className="flex flex-wrap gap-4 pt-1">
+                                {book.startedAt && (
+                                  <div>
+                                    <span className="text-xs font-semibold text-gray-400 dark:text-gray-500">Started: </span>
+                                    <span className="text-xs text-gray-600 dark:text-gray-300">{formatDate(book.startedAt)}</span>
+                                  </div>
+                                )}
+                                {book.userStatus === "read" && book.finishedAt && (
+                                  <div>
+                                    <span className="text-xs font-semibold text-gray-400 dark:text-gray-500">Finished: </span>
+                                    <span className="text-xs text-gray-600 dark:text-gray-300">{formatDate(book.finishedAt)}</span>
+                                  </div>
+                                )}
+                                {book.userStatus === "read" && book.rating && (
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-xs font-semibold text-gray-400 dark:text-gray-500">Rating: </span>
+                                    <StarDisplay rating={book.rating} />
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -849,6 +920,7 @@ export default function Books() {
           modalError={modalError}
           onSubmit={handleSubmit}
           onClose={closeModal}
+          currentStatus={currentStatus}
         />
       )}
 
