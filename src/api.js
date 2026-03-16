@@ -1,41 +1,23 @@
-// Single source of truth for the API base URL.
-// Set VITE_API_BASE in .env.local for local dev and in Vercel dashboard for production.
-const BASE_URL = import.meta.env.VITE_API_BASE || "http://localhost:3000";
-
-// Sanity check — Vite bakes env vars at build time so a missing VITE_API_BASE
-// won't throw at runtime; it silently falls back to localhost and fails in
-// production with a confusing CORS or network error. Warn loudly instead.
-if (!import.meta.env.VITE_API_BASE) {
-    console.error(
-        "[api.js] VITE_API_BASE is not set. " +
-        "API calls will fall back to http://localhost:3000. " +
-        "Set VITE_API_BASE in .env.local for development or in the Vercel dashboard for production."
-    );
-}
-
-function getAuthHeaders() {
-    const token = localStorage.getItem("token");
-    const headers = { "Content-Type": "application/json" };
-    if (token) headers.Authorization = `Bearer ${token}`;
-    return headers;
-}
+// In dev the Vite proxy rewrites /api/* → http://localhost:3000/*
+// so all requests are same-origin and cookies flow without any CORS issues.
+// In production VITE_API_BASE is set to the Railway URL in the Vercel dashboard.
+const BASE_URL = import.meta.env.VITE_API_BASE
+    ? `${import.meta.env.VITE_API_BASE}`
+    : "/api";
 
 // Central fetch wrapper for authenticated requests.
-// On 401, clears local storage and redirects to login. Throws a named
-// AbortError so callers that check err.name === "AbortError" will silently
-// ignore the redirect rather than showing a toast error.
+// credentials: "include" sends the HttpOnly cookie on every request.
+// On 401, clears localStorage user data and redirects to login.
 async function request(url, options = {}) {
     const res = await fetch(`${BASE_URL}${url}`, {
-        headers: getAuthHeaders(),
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
         ...options,
     });
 
     if (res.status === 401) {
-        localStorage.removeItem("token");
         localStorage.removeItem("user");
         window.location.href = "/";
-        // Throw an AbortError so callers with err.name === "AbortError" guards
-        // ignore this redirect silently instead of showing a toast
         throw new DOMException("Unauthorized — redirecting to login", "AbortError");
     }
 
@@ -44,10 +26,12 @@ async function request(url, options = {}) {
     return data;
 }
 
-// Auth-free wrapper for public endpoints (login, OTP, reset).
+// Auth-free wrapper — still needs credentials:include so the Set-Cookie
+// response from /login is accepted by the browser
 async function publicRequest(url, body) {
     const res = await fetch(`${BASE_URL}${url}`, {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
     });
@@ -62,10 +46,20 @@ export function loginUser(credentials) { return publicRequest("/login", credenti
 export function sendResetOTP(body) { return publicRequest("/send-reset-otp", body); }
 export function resetPassword(body) { return publicRequest("/reset-password", body); }
 
+export function getMe() {
+    return request("/me");
+}
+
+export function refreshToken() {
+    return request("/refresh-token", { method: "POST" });
+}
+
+export function logout() {
+    return request("/logout", { method: "POST" });
+}
+
 // ─── Books ────────────────────────────────────────────────────────────────────
 
-// Appends house, genre (multi-value), and status filter params to a URLSearchParams.
-// Shared by fetchBooks and searchBooks — single source of truth for filter param names.
 function appendFilters(params, filters) {
     if (filters.house) params.append("filterHouse", filters.house);
     if (filters.genres?.length) {
@@ -74,29 +68,21 @@ function appendFilters(params, filters) {
     if (filters.status) params.append("filterStatus", filters.status);
 }
 
-// Page-based pagination for regular browsing and filter-only queries.
 export function fetchBooks(limit, page = 1, sortBy = null, sortOrder = "asc", filters = {}, signal) {
     const params = new URLSearchParams({ limit, page });
-
     if (sortBy) {
         params.append("sortBy", sortBy);
         params.append("sortOrder", sortOrder);
     }
-
     appendFilters(params, filters);
-
     return request(`/fetchAllBooks?${params}`, { signal });
 }
 
-// Cursor-based pagination for Atlas Search (text query present).
-// Text query is optional — at least one filter must be present if q is absent.
 export function searchBooks(query, filters = {}, limit, cursor, signal) {
     const params = new URLSearchParams({ limit });
-
     if (query) params.append("q", query);
     appendFilters(params, filters);
     if (cursor) params.append("searchAfter", JSON.stringify(cursor));
-
     return request(`/searchBooks?${params}`, { signal });
 }
 

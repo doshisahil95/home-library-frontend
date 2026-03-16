@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { LayoutDashboard, BookOpen, Compass, ChevronLeft, ChevronRight, Menu, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { updateTheme as apiUpdateTheme } from "../api";
+import { useSession } from "./SessionContext";
 
 const NAV_ITEMS = [
   { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -66,6 +67,7 @@ export default function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const dropdownRef = useRef(null);
+  const { sessionWarning, msRemaining, extendSession, handleLogout: sessionLogout } = useSession();
 
   useEffect(() => {
     try {
@@ -115,11 +117,7 @@ export default function Layout() {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    navigate("/");
-  };
+  const handleLogout = () => sessionLogout();
 
   return (
     <div className="flex min-h-screen bg-gray-100 dark:bg-gray-900">
@@ -224,6 +222,24 @@ export default function Layout() {
             )}
           </div>
         </header>
+
+        {/* Session warning banner */}
+        {sessionWarning && (
+          <div className="bg-amber-50 dark:bg-amber-900/40 border-b border-amber-200 dark:border-amber-700 px-4 py-2.5 flex items-center justify-between gap-4">
+            <p className="text-sm text-amber-800 dark:text-amber-200">
+              Your session expires in{" "}
+              <span className="font-semibold">
+                {Math.ceil((msRemaining || 0) / 60000)} minute{Math.ceil((msRemaining || 0) / 60000) !== 1 ? "s" : ""}
+              </span>. Would you like to stay logged in?
+            </p>
+            <button
+              onClick={extendSession}
+              className="shrink-0 px-3 py-1 text-xs font-medium bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition"
+            >
+              Stay logged in
+            </button>
+          </div>
+        )}
 
         <main className="flex-1 p-4 md:p-6 overflow-x-hidden">
           <Outlet />

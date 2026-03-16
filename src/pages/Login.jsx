@@ -155,7 +155,8 @@ export default function Login() {
 
       const data = await loginUser({ email, password });
 
-      localStorage.setItem("token", data.token);
+      // Token is now an HttpOnly cookie set by the server — not accessible here.
+      // Only store non-sensitive user info for UI purposes (name, theme, etc.)
       localStorage.setItem("user", JSON.stringify(data.user));
 
       navigate("/dashboard");

@@ -1,29 +1,67 @@
+import { useState, useEffect, useRef } from "react";
 import { Navigate } from "react-router-dom";
+import { getMe, refreshToken as apiRefreshToken, logout as apiLogout } from "../api";
+import { SessionContext } from "./SessionContext";
 
-// Decodes the JWT payload and checks expiry client-side.
-// This is a UX optimisation — it catches expired tokens before they make a
-// network call and redirects immediately. It is NOT a security control;
-// the server's jwt.verify() in auth.middleware.js is the real gate.
-function isTokenValid(token) {
-  if (!token) return false;
-  try {
-    const payload = JSON.parse(atob(token.split(".")[1]));
-    // exp is in seconds; Date.now() is in milliseconds
-    // Add a 30s buffer so tokens expiring imminently are treated as expired
-    return payload.exp * 1000 > Date.now() + 30_000;
-  } catch {
-    return false; // malformed token
-  }
-}
+const CHECK_INTERVAL_MS = 5 * 60 * 1000;  // check every 5 minutes
+const WARNING_THRESHOLD_MS = 10 * 60 * 1000; // warn when < 10 minutes left
 
 export default function ProtectedRoute({ children }) {
-  const token = localStorage.getItem("token");
+  const [status, setStatus] = useState("loading"); // loading | valid | invalid
+  const [sessionWarning, setSessionWarning] = useState(false);
+  const [msRemaining, setMsRemaining] = useState(null);
+  const intervalRef = useRef(null);
 
-  if (!isTokenValid(token)) {
-    localStorage.removeItem("token");
+  const checkSession = async () => {
+    try {
+      const { msRemaining } = await getMe();
+      setMsRemaining(msRemaining);
+      if (msRemaining <= 0) {
+        setStatus("invalid");
+      } else {
+        setStatus("valid");
+        setSessionWarning(msRemaining < WARNING_THRESHOLD_MS);
+      }
+    } catch {
+      setStatus("invalid");
+    }
+  };
+
+  useEffect(() => {
+    checkSession();
+    intervalRef.current = setInterval(checkSession, CHECK_INTERVAL_MS);
+    return () => clearInterval(intervalRef.current);
+  }, []);
+
+  const extendSession = async () => {
+    try {
+      await apiRefreshToken();
+      setSessionWarning(false);
+      setMsRemaining(4 * 60 * 60 * 1000);
+    } catch {
+      setStatus("invalid");
+    }
+  };
+
+  const handleLogout = async () => {
+    try { await apiLogout(); } catch { /* ignore */ }
+    localStorage.removeItem("user");
+    window.location.href = "/";
+  };
+
+  if (status === "loading") {
+    // Blank screen during the initial /me check — avoids flash of protected content
+    return null;
+  }
+
+  if (status === "invalid") {
     localStorage.removeItem("user");
     return <Navigate to="/" replace />;
   }
 
-  return children;
+  return (
+    <SessionContext.Provider value={{ sessionWarning, msRemaining, extendSession, handleLogout }}>
+      {children}
+    </SessionContext.Provider>
+  );
 }
