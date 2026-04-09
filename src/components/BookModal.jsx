@@ -1,9 +1,9 @@
+import { useState, useEffect } from "react";
 import { Lock } from "lucide-react";
 import { STATUSES, STATUS_STYLES, STATUS_LABELS } from "../data/bookConstants";
-import housesData from "../data/houses.json";
-import genresData from "../data/genres.json";
+import { getGenres, getHouses, getLanguages } from "../api";
 
-// Mirrors backend transition rules — keeps UI consistent with server enforcement
+// Mirrors backend transition rules
 const VALID_TRANSITIONS = {
     null: ["want to read", "reading", "read"],
     "want to read": ["reading", "read"],
@@ -16,6 +16,23 @@ function canTransitionTo(currentStatus, newStatus) {
     return (VALID_TRANSITIONS[currentStatus ?? null] ?? []).includes(newStatus);
 }
 
+// ─── Skeleton pills ───────────────────────────────────────────────────────────
+// Shown while reference data is loading — preserves layout, no shift on load.
+
+function PillSkeleton({ count = 4 }) {
+    return (
+        <div className="flex flex-wrap gap-2">
+            {[...Array(count)].map((_, i) => (
+                <div
+                    key={i}
+                    className="h-7 rounded-full bg-gray-200 dark:bg-gray-700 animate-pulse"
+                    style={{ width: `${48 + (i % 3) * 16}px` }}
+                />
+            ))}
+        </div>
+    );
+}
+
 export default function BookModal({
     isEditing,
     formData,
@@ -23,8 +40,37 @@ export default function BookModal({
     modalError,
     onSubmit,
     onClose,
-    currentStatus, // status as it exists in DB, used for transition validation
+    currentStatus,
 }) {
+    const [houses, setHouses] = useState([]);
+    const [genres, setGenres] = useState([]);
+    const [languages, setLanguages] = useState([]);
+    const [refLoading, setRefLoading] = useState(true);
+    const [refError, setRefError] = useState("");
+
+    // Fetch all reference data on mount — always fresh
+    useEffect(() => {
+        let cancelled = false;
+        setRefLoading(true);
+        setRefError("");
+
+        Promise.all([getHouses(), getGenres(), getLanguages()])
+            .then(([h, g, l]) => {
+                if (cancelled) return;
+                setHouses(h.data.map((x) => x.name));
+                setGenres(g.data.map((x) => x.name));
+                setLanguages(l.data.map((x) => x.name));
+            })
+            .catch(() => {
+                if (!cancelled) setRefError("Failed to load options. Please close and try again.");
+            })
+            .finally(() => {
+                if (!cancelled) setRefLoading(false);
+            });
+
+        return () => { cancelled = true; };
+    }, []);
+
     return (
         <div
             className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50 px-4"
@@ -39,8 +85,11 @@ export default function BookModal({
                 </h2>
 
                 {modalError && <div className="text-red-500 text-sm mb-3">{modalError}</div>}
+                {refError && <div className="text-red-500 text-sm mb-3">{refError}</div>}
 
                 <form onSubmit={onSubmit} className="space-y-4">
+
+                    {/* Title */}
                     <input
                         type="text"
                         placeholder="Title"
@@ -49,6 +98,7 @@ export default function BookModal({
                         className="w-full px-4 py-2 rounded-lg border dark:bg-gray-700 dark:text-white text-sm"
                     />
 
+                    {/* Author */}
                     <input
                         type="text"
                         placeholder="Author"
@@ -59,57 +109,111 @@ export default function BookModal({
 
                     {/* House */}
                     <div>
-                        <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Select House</label>
-                        <div className="flex flex-wrap gap-2">
-                            {housesData.map((house) => (
-                                <button
-                                    type="button"
-                                    key={house}
-                                    onClick={() => setFormData({ ...formData, house })}
-                                    className={`px-3 py-1 rounded-full text-sm ${formData.house === house
+                        <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                            Select House
+                        </label>
+                        {refLoading ? <PillSkeleton count={2} /> : (
+                            <div className="flex flex-wrap gap-2">
+                                {houses.map((house) => (
+                                    <button
+                                        type="button"
+                                        key={house}
+                                        onClick={() => setFormData({ ...formData, house })}
+                                        className={`px-3 py-1 rounded-full text-sm ${formData.house === house
                                             ? "bg-green-600 text-white"
                                             : "bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200"
-                                        }`}
-                                >
-                                    {house}
-                                </button>
-                            ))}
-                        </div>
+                                            }`}
+                                    >
+                                        {house}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
                     </div>
 
                     {/* Genre */}
                     <div>
-                        <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Select Genre</label>
-                        <div className="flex flex-wrap gap-2">
-                            {genresData.map((genre) => {
-                                const isSelected = formData.genre.includes(genre);
-                                return (
+                        <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                            Select Genre
+                        </label>
+                        {refLoading ? <PillSkeleton count={5} /> : (
+                            <div className="flex flex-wrap gap-2">
+                                {genres.map((genre) => {
+                                    const isSelected = formData.genre.includes(genre);
+                                    return (
+                                        <button
+                                            type="button"
+                                            key={genre}
+                                            onClick={() =>
+                                                setFormData({
+                                                    ...formData,
+                                                    genre: isSelected
+                                                        ? formData.genre.filter((g) => g !== genre)
+                                                        : [...formData.genre, genre],
+                                                })
+                                            }
+                                            className={`px-3 py-1 rounded-full text-sm ${isSelected
+                                                ? "bg-blue-600 text-white"
+                                                : "bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                                                }`}
+                                        >
+                                            {genre}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Language */}
+                    <div>
+                        <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                            Language <span className="text-gray-400 font-normal">(optional)</span>
+                        </label>
+                        {refLoading ? <PillSkeleton count={4} /> : (
+                            <div className="flex flex-wrap gap-2">
+                                {languages.map((lang) => (
                                     <button
                                         type="button"
-                                        key={genre}
+                                        key={lang}
                                         onClick={() =>
                                             setFormData({
                                                 ...formData,
-                                                genre: isSelected
-                                                    ? formData.genre.filter((g) => g !== genre)
-                                                    : [...formData.genre, genre],
+                                                language: formData.language === lang ? "" : lang,
                                             })
                                         }
-                                        className={`px-3 py-1 rounded-full text-sm ${isSelected
-                                                ? "bg-blue-600 text-white"
-                                                : "bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                                        className={`px-3 py-1 rounded-full text-sm ${formData.language === lang
+                                            ? "bg-purple-600 text-white"
+                                            : "bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200"
                                             }`}
                                     >
-                                        {genre}
+                                        {lang}
                                     </button>
-                                );
-                            })}
-                        </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Location in House */}
+                    <div>
+                        <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                            Location in House <span className="text-gray-400 font-normal">(optional)</span>
+                        </label>
+                        <input
+                            type="text"
+                            placeholder="e.g. Shelf 3, Row 2"
+                            value={formData.locationInHouse || ""}
+                            onChange={(e) => setFormData({ ...formData, locationInHouse: e.target.value })}
+                            maxLength={200}
+                            className="w-full px-4 py-2 rounded-lg border dark:bg-gray-700 dark:text-white text-sm"
+                        />
                     </div>
 
                     {/* Description */}
                     <div>
-                        <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Description</label>
+                        <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                            Description <span className="text-gray-400 font-normal">(optional)</span>
+                        </label>
                         <textarea
                             placeholder="Add a note or description..."
                             value={formData.description}
@@ -127,7 +231,9 @@ export default function BookModal({
 
                     {/* Status */}
                     <div>
-                        <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">My Status</label>
+                        <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                            My Status
+                        </label>
                         <div className="flex flex-wrap gap-2">
                             {STATUSES.map((s) => {
                                 const allowed = canTransitionTo(currentStatus ?? null, s);
@@ -144,10 +250,10 @@ export default function BookModal({
                                         }
                                         title={!allowed ? `Cannot change from "${currentStatus}" to "${s}"` : undefined}
                                         className={`px-3 py-1 rounded-full text-sm transition ${!allowed
-                                                ? "opacity-30 cursor-not-allowed bg-gray-200 dark:bg-gray-700 text-gray-500"
-                                                : formData.userStatus === s
-                                                    ? STATUS_STYLES[s] + " ring-2 ring-offset-1 ring-current"
-                                                    : "bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                                            ? "opacity-30 cursor-not-allowed bg-gray-200 dark:bg-gray-700 text-gray-500"
+                                            : formData.userStatus === s
+                                                ? STATUS_STYLES[s] + " ring-2 ring-offset-1 ring-current"
+                                                : "bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200"
                                             }`}
                                     >
                                         {STATUS_LABELS[s]}
@@ -171,7 +277,7 @@ export default function BookModal({
                         )}
                     </div>
 
-                    {/* Reading dates — side by side when both visible (read), single column when only started (reading) */}
+                    {/* Reading dates */}
                     {(formData.userStatus === "reading" || formData.userStatus === "read") && (
                         <div className={formData.userStatus === "read" ? "grid grid-cols-2 gap-3" : ""}>
 
@@ -202,7 +308,7 @@ export default function BookModal({
                                 </p>
                             </div>
 
-                            {/* Finished date — only when read */}
+                            {/* Finished date */}
                             {formData.userStatus === "read" && (
                                 <div>
                                     <label className="block mb-1.5 text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -233,7 +339,7 @@ export default function BookModal({
                         </div>
                     )}
 
-                    {/* Rating — visible only when read, locked once set */}
+                    {/* Rating */}
                     {formData.userStatus === "read" && (
                         <div>
                             <label className="block mb-1.5 text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -253,13 +359,7 @@ export default function BookModal({
                                                         ...formData,
                                                         rating: formData.rating === star ? null : star,
                                                     })}
-                                                    className={`text-2xl transition-transform ${isRatingLocked
-                                                            ? "cursor-not-allowed"
-                                                            : "hover:scale-110"
-                                                        } ${formData.rating >= star
-                                                            ? "text-yellow-400"
-                                                            : "text-gray-300 dark:text-gray-600"
-                                                        }`}
+                                                    className={`text-2xl transition-transform ${isRatingLocked ? "cursor-not-allowed" : "hover:scale-110"} ${formData.rating >= star ? "text-yellow-400" : "text-gray-300 dark:text-gray-600"}`}
                                                 >
                                                     ★
                                                 </button>
@@ -295,7 +395,8 @@ export default function BookModal({
                         </button>
                         <button
                             type="submit"
-                            className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-sm"
+                            disabled={refLoading}
+                            className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {isEditing ? "Update Book" : "Add Book"}
                         </button>

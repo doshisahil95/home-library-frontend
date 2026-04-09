@@ -6,8 +6,6 @@ const BASE_URL = import.meta.env.VITE_API_BASE
     : "/api";
 
 // Central fetch wrapper for authenticated requests.
-// credentials: "include" sends the HttpOnly cookie on every request.
-// On 401, clears localStorage user data and redirects to login.
 async function request(url, options = {}) {
     const res = await fetch(`${BASE_URL}${url}`, {
         credentials: "include",
@@ -26,8 +24,7 @@ async function request(url, options = {}) {
     return data;
 }
 
-// Auth-free wrapper — still needs credentials:include so the Set-Cookie
-// response from /login is accepted by the browser
+// Auth-free wrapper
 async function publicRequest(url, body) {
     const res = await fetch(`${BASE_URL}${url}`, {
         method: "POST",
@@ -62,6 +59,7 @@ export function logout() {
 
 function appendFilters(params, filters) {
     if (filters.house) params.append("filterHouse", filters.house);
+    if (filters.language) params.append("filterLanguage", filters.language);
     if (filters.genres?.length) {
         filters.genres.forEach((g) => params.append("filterGenre", g));
     }
@@ -116,3 +114,11 @@ export function updateTheme(theme) {
 export function getDiscoverData() {
     return request("/discover");
 }
+
+// ─── Reference data ───────────────────────────────────────────────────────────
+// Fetched on demand — when the modal opens or the filter panel opens.
+// Returns { data: [{ _id, name }] }
+
+export function getGenres() { return request("/reference-data/genres"); }
+export function getHouses() { return request("/reference-data/houses"); }
+export function getLanguages() { return request("/reference-data/languages"); }

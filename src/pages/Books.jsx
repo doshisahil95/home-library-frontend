@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Filter, ChevronDown } from "lucide-react";
 import toast from "react-hot-toast";
-import housesData from "../data/houses.json";
-import genresData from "../data/genres.json";
 import BookModal from "../components/BookModal";
 import DeleteModal from "../components/DeleteModal";
 import { STATUSES, FILTER_STATUSES, STATUS_STYLES, STATUS_LABELS } from "../data/bookConstants";
@@ -12,11 +10,17 @@ import {
   updateBook,
   deleteBook,
   searchBooks,
+  getGenres,
+  getHouses,
+  getLanguages,
 } from "../api";
 
-const EMPTY_FORM = { title: "", author: "", house: "", genre: [], description: "", userStatus: null, startedAt: null, startedAtLocked: false, finishedAt: null, finishedAtLocked: false, rating: null };
+const EMPTY_FORM = {
+  title: "", author: "", house: "", genre: [], language: "", locationInHouse: "",
+  description: "", userStatus: null, startedAt: null, startedAtLocked: false,
+  finishedAt: null, finishedAtLocked: false, rating: null,
+};
 
-// Outside component — stable identity
 function SortIcon({ field, sortBy, sortOrder, disabled }) {
   if (disabled || sortBy !== field) return <span className="ml-1 text-gray-300 dark:text-gray-600">↕</span>;
   return <span className="ml-1">{sortOrder === "asc" ? "↑" : "↓"}</span>;
@@ -54,6 +58,23 @@ function StarDisplay({ rating }) {
   );
 }
 
+// ─── Filter panel skeleton ────────────────────────────────────────────────────
+// Shown in the House, Genre and Language columns while reference data loads.
+
+function FilterPillSkeleton({ count = 3 }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {[...Array(count)].map((_, i) => (
+        <div
+          key={i}
+          className="h-6 rounded-full bg-gray-200 dark:bg-gray-700 animate-pulse"
+          style={{ width: `${40 + (i % 3) * 14}px` }}
+        />
+      ))}
+    </div>
+  );
+}
+
 export default function Books() {
   const [books, setBooks] = useState([]);
   const [showSkeleton, setShowSkeleton] = useState(true);
@@ -64,11 +85,19 @@ export default function Books() {
   // Search & filters
   const [search, setSearch] = useState("");
   const [filterHouse, setFilterHouse] = useState("");
-  const [filterGenres, setFilterGenres] = useState([]); // array — AND semantics
+  const [filterGenres, setFilterGenres] = useState([]);
+  const [filterLanguage, setFilterLanguage] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
 
-  // Sort (browse mode only)
+  // Reference data for filter panel — fetched when panel opens
+  const [filterHouses, setFilterHouses] = useState([]);
+  const [filterGenreOptions, setFilterGenreOptions] = useState([]);
+  const [filterLanguageOptions, setFilterLanguageOptions] = useState([]);
+  const [refLoading, setRefLoading] = useState(false);
+  const refLoaded = useRef(false); // only fetch once per session open
+
+  // Sort
   const [sortBy, setSortBy] = useState(null);
   const [sortOrder, setSortOrder] = useState("asc");
 
@@ -81,7 +110,6 @@ export default function Books() {
   const [searchCursor, setSearchCursor] = useState(null);
   const [searchPrevCursors, setSearchPrevCursors] = useState([]);
 
-  // Expanded row
   const [expandedId, setExpandedId] = useState(null);
 
   // Modals
@@ -89,7 +117,7 @@ export default function Books() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [currentId, setCurrentId] = useState(null);
-  const [currentStatus, setCurrentStatus] = useState(null); // DB status when modal opened
+  const [currentStatus, setCurrentStatus] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
   const [deletingBookTitle, setDeletingBookTitle] = useState("");
 
@@ -101,21 +129,44 @@ export default function Books() {
   const initialLoad = useRef(true);
   const abortRef = useRef(null);
 
-  // isAtlasSearch  = text query present → Atlas Search + cursor pagination
-  // hasFilters     = dropdown filters only → Mongoose query + offset pagination
-  // isSearchActive = either → used for UI state (filter badge, reset button)
   const isAtlasSearch = search.trim() !== "";
-  const hasFilters = !!filterHouse || filterGenres.length > 0 || !!filterStatus;
+  const hasFilters = !!filterHouse || filterGenres.length > 0 || !!filterLanguage || !!filterStatus;
   const isSearchActive = isAtlasSearch || hasFilters;
 
   const activeFilters = useMemo(
-    () => ({ house: filterHouse, genres: filterGenres, status: filterStatus }),
-    [filterHouse, filterGenres, filterStatus]
+    () => ({ house: filterHouse, genres: filterGenres, language: filterLanguage, status: filterStatus }),
+    [filterHouse, filterGenres, filterLanguage, filterStatus]
   );
 
-  const activeFilterCount = [filterHouse, filterStatus].filter(Boolean).length + filterGenres.length;
+  const activeFilterCount = [filterHouse, filterLanguage, filterStatus].filter(Boolean).length + filterGenres.length;
 
-  // ─── Fetch Books (browse + filter mode) ──────────────────────────────────
+  // ─── Fetch reference data for filter panel ────────────────────────────────
+  // Only fetches once per filter panel open session — refLoaded ref prevents
+  // re-fetching on collapse/expand within the same page visit.
+
+  const loadFilterRefData = useCallback(async () => {
+    if (refLoaded.current) return;
+    setRefLoading(true);
+    try {
+      const [h, g, l] = await Promise.all([getHouses(), getGenres(), getLanguages()]);
+      setFilterHouses(h.data.map((x) => x.name));
+      setFilterGenreOptions(g.data.map((x) => x.name));
+      setFilterLanguageOptions(l.data.map((x) => x.name));
+      refLoaded.current = true;
+    } catch {
+      toast.error("Failed to load filter options");
+    } finally {
+      setRefLoading(false);
+    }
+  }, []);
+
+  const handleToggleFilters = () => {
+    const opening = !filtersOpen;
+    setFiltersOpen(opening);
+    if (opening) loadFilterRefData();
+  };
+
+  // ─── Fetch Books ──────────────────────────────────────────────────────────
 
   const fetchBooks = useCallback(async (
     page = 1, showLoader = true, customLimit = null,
@@ -147,7 +198,7 @@ export default function Books() {
     }
   }, [limit]);
 
-  // ─── Fetch Search Results (Atlas Search) ─────────────────────────────────
+  // ─── Fetch Search Results ─────────────────────────────────────────────────
 
   const fetchSearch = useCallback(async (
     query, filters, cursor = null, direction = "next", customLimit = null
@@ -181,21 +232,17 @@ export default function Books() {
     }
   }, [limit]);
 
-  // ─── Refresh after mutation (add / edit / delete) ────────────────────────
-  // Single source of truth — avoids repeating the search-vs-browse branch
-  // in handleSubmit, confirmDelete, etc.
+  // ─── Refresh after mutation ───────────────────────────────────────────────
 
   const refreshBooks = useCallback(() => {
-    if (search.trim()) {
-      return fetchSearch(search, activeFilters);
-    }
+    if (search.trim()) return fetchSearch(search, activeFilters);
     return fetchBooks(1, false, null, sortBy, sortOrder, activeFilters);
   }, [search, activeFilters, sortBy, sortOrder, fetchSearch, fetchBooks]);
 
   useEffect(() => {
     if (hasMounted.current) return;
     hasMounted.current = true;
-    fetchBooks(1, true, null, null, "asc", { house: "", genre: "", status: "" });
+    fetchBooks(1, true, null, null, "asc", { house: "", genres: [], language: "", status: "" });
   }, []);
 
   // ─── Debounced trigger ────────────────────────────────────────────────────
@@ -204,7 +251,7 @@ export default function Books() {
     if (initialLoad.current) return;
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
     debounceTimer.current = setTimeout(() => {
-      const filters = { house: filterHouse, genres: filterGenres, status: filterStatus };
+      const filters = { house: filterHouse, genres: filterGenres, language: filterLanguage, status: filterStatus };
       setSearchCursor(null);
       setSearchPrevCursors([]);
       setExpandedId(null);
@@ -215,11 +262,12 @@ export default function Books() {
       }
     }, 250);
     return () => clearTimeout(debounceTimer.current);
-  }, [search, filterHouse, filterGenres, filterStatus]);
+  }, [search, filterHouse, filterGenres, filterLanguage, filterStatus]);
+
   // ─── Sort ─────────────────────────────────────────────────────────────────
 
   const handleSort = (field) => {
-    if (isAtlasSearch) return; // sort disabled in Atlas Search mode
+    if (isAtlasSearch) return;
     const newOrder = sortBy === field && sortOrder === "asc" ? "desc" : "asc";
     setSortBy(field);
     setSortOrder(newOrder);
@@ -241,24 +289,21 @@ export default function Books() {
     setSearch("");
     setFilterHouse("");
     setFilterGenres([]);
+    setFilterLanguage("");
     setFilterStatus("");
     setExpandedId(null);
   };
 
-  const isResetDisabled = search === "" && !filterHouse && filterGenres.length === 0 && !filterStatus;
+  const isResetDisabled = search === "" && !filterHouse && filterGenres.length === 0 && !filterLanguage && !filterStatus;
 
-  // ─── Row expand toggle ────────────────────────────────────────────────────
-
-  const toggleExpand = (id) => {
-    setExpandedId((prev) => (prev === id ? null : id));
-  };
+  const toggleExpand = (id) => setExpandedId((prev) => (prev === id ? null : id));
 
   // ─── Form Handlers ────────────────────────────────────────────────────────
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.title.trim() || !formData.author.trim() || !formData.house || formData.genre.length === 0) {
-      setModalError("All fields are required");
+      setModalError("Title, author, house and at least one genre are required");
       return;
     }
     try {
@@ -292,6 +337,8 @@ export default function Books() {
       author: book.author,
       house: book.house,
       genre: book.genre || [],
+      language: book.language || "",
+      locationInHouse: book.locationInHouse || "",
       description: book.description || "",
       userStatus: book.userStatus || null,
       startedAt: book.startedAt || null,
@@ -348,6 +395,67 @@ export default function Books() {
 
   const skeletonRows = Math.min(limit, 25);
 
+  // ─── Expanded row detail ──────────────────────────────────────────────────
+  // Shared between desktop and mobile to avoid duplication.
+
+  function ExpandedDetail({ book }) {
+    return (
+      <div className="space-y-3">
+        {book.genre?.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs font-semibold text-gray-400 dark:text-gray-500 mr-1">Genres:</span>
+            {book.genre.map((g, idx) => (
+              <span key={idx} className="px-2 py-0.5 text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-full">
+                {g}
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="flex flex-wrap gap-4">
+          {book.language && (
+            <div>
+              <span className="text-xs font-semibold text-gray-400 dark:text-gray-500">Language: </span>
+              <span className="text-xs text-gray-600 dark:text-gray-300">{book.language}</span>
+            </div>
+          )}
+          {book.locationInHouse && (
+            <div>
+              <span className="text-xs font-semibold text-gray-400 dark:text-gray-500">Location: </span>
+              <span className="text-xs text-gray-600 dark:text-gray-300">{book.locationInHouse}</span>
+            </div>
+          )}
+        </div>
+        <div>
+          <span className="text-xs font-semibold text-gray-400 dark:text-gray-500">Description:</span>
+          <p className={`text-sm leading-relaxed mt-1 ${book.description ? "text-gray-700 dark:text-gray-300" : "text-gray-400 dark:text-gray-500 italic"}`}>
+            {book.description || "No description added yet."}
+          </p>
+        </div>
+        {(book.userStatus === "reading" || book.userStatus === "read") && (
+          <div className="flex flex-wrap gap-4 pt-1">
+            {book.startedAt && (
+              <div>
+                <span className="text-xs font-semibold text-gray-400 dark:text-gray-500">Started: </span>
+                <span className="text-xs text-gray-600 dark:text-gray-300">{formatDate(book.startedAt)}</span>
+              </div>
+            )}
+            {book.userStatus === "read" && book.finishedAt && (
+              <div>
+                <span className="text-xs font-semibold text-gray-400 dark:text-gray-500">Finished: </span>
+                <span className="text-xs text-gray-600 dark:text-gray-300">{formatDate(book.finishedAt)}</span>
+              </div>
+            )}
+            {book.userStatus === "read" && book.rating && (
+              <div className="flex items-center gap-1">
+                <span className="text-xs font-semibold text-gray-400 dark:text-gray-500">Rating: </span>
+                <StarDisplay rating={book.rating} />
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -375,10 +483,10 @@ export default function Books() {
         </div>
         <button
           type="button"
-          onClick={() => setFiltersOpen((o) => !o)}
+          onClick={handleToggleFilters}
           className={`relative flex items-center gap-2 h-10 px-4 rounded-lg border transition ${filtersOpen || activeFilterCount > 0
-              ? "bg-blue-600 text-white border-blue-600"
-              : "bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200"
+            ? "bg-blue-600 text-white border-blue-600"
+            : "bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200"
             }`}
         >
           <Filter size={16} />
@@ -399,28 +507,28 @@ export default function Books() {
         </button>
       </div>
 
-      {/* Collapsible filter row — 3 columns: House | Genre | Status */}
+      {/* Collapsible filter panel — 4 columns: House | Genre | Language | Status */}
       {filtersOpen && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
 
           {/* House */}
           <div className="space-y-2">
             <span className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">House</span>
-            <div className="flex flex-wrap gap-1.5">
-              {housesData.map((h) => (
-                <button
-                  key={h}
-                  type="button"
-                  onClick={() => setFilterHouse((prev) => prev === h ? "" : h)}
-                  className={`px-2.5 py-1 rounded-full text-xs transition ${filterHouse === h
+            {refLoading ? <FilterPillSkeleton count={2} /> : (
+              <div className="flex flex-wrap gap-1.5">
+                {filterHouses.map((h) => (
+                  <button key={h} type="button"
+                    onClick={() => setFilterHouse((prev) => prev === h ? "" : h)}
+                    className={`px-2.5 py-1 rounded-full text-xs transition ${filterHouse === h
                       ? "bg-green-600 text-white"
                       : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
-                    }`}
-                >
-                  {h}
-                </button>
-              ))}
-            </div>
+                      }`}
+                  >
+                    {h}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Genre */}
@@ -433,28 +541,46 @@ export default function Books() {
                 </span>
               )}
             </span>
-            <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto pr-1">
-              {genresData.map((g) => {
-                const selected = filterGenres.includes(g);
-                return (
-                  <button
-                    key={g}
-                    type="button"
-                    onClick={() =>
-                      setFilterGenres((prev) =>
+            {refLoading ? <FilterPillSkeleton count={5} /> : (
+              <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto pr-1">
+                {filterGenreOptions.map((g) => {
+                  const selected = filterGenres.includes(g);
+                  return (
+                    <button key={g} type="button"
+                      onClick={() => setFilterGenres((prev) =>
                         selected ? prev.filter((x) => x !== g) : [...prev, g]
-                      )
-                    }
-                    className={`px-2.5 py-1 rounded-full text-xs transition ${selected
+                      )}
+                      className={`px-2.5 py-1 rounded-full text-xs transition ${selected
                         ? "bg-blue-600 text-white"
                         : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+                        }`}
+                    >
+                      {g}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Language */}
+          <div className="space-y-2">
+            <span className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Language</span>
+            {refLoading ? <FilterPillSkeleton count={4} /> : (
+              <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto pr-1">
+                {filterLanguageOptions.map((l) => (
+                  <button key={l} type="button"
+                    onClick={() => setFilterLanguage((prev) => prev === l ? "" : l)}
+                    className={`px-2.5 py-1 rounded-full text-xs transition ${filterLanguage === l
+                      ? "bg-purple-600 text-white"
+                      : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
                       }`}
                   >
-                    {g}
+                    {l}
                   </button>
-                );
-              })}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Status */}
@@ -462,13 +588,11 @@ export default function Books() {
             <span className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Status</span>
             <div className="flex flex-wrap gap-1.5">
               {FILTER_STATUSES.map((s) => (
-                <button
-                  key={s}
-                  type="button"
+                <button key={s} type="button"
                   onClick={() => setFilterStatus((prev) => prev === s ? "" : s)}
                   className={`px-2.5 py-1 rounded-full text-xs transition ${filterStatus === s
-                      ? `${STATUS_STYLES[s]} ring-1 ring-current`
-                      : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+                    ? `${STATUS_STYLES[s]} ring-1 ring-current`
+                    : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
                     }`}
                 >
                   {STATUS_LABELS[s]}
@@ -476,11 +600,10 @@ export default function Books() {
               ))}
             </div>
           </div>
-
         </div>
       )}
 
-      {/* Active filter summary — dismissible tags */}
+      {/* Active filter tags */}
       {activeFilterCount > 0 && (
         <div className="flex flex-wrap gap-1.5 items-center">
           <span className="text-xs text-gray-400 dark:text-gray-500 mr-0.5">Filtering by:</span>
@@ -489,8 +612,7 @@ export default function Books() {
             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300">
               House: {filterHouse}
               <button type="button" onClick={() => setFilterHouse("")}
-                className="ml-0.5 hover:text-green-900 dark:hover:text-green-100 font-bold leading-none"
-                aria-label={`Remove house filter ${filterHouse}`}>×</button>
+                className="ml-0.5 hover:text-green-900 dark:hover:text-green-100 font-bold leading-none">×</button>
             </span>
           )}
 
@@ -498,17 +620,23 @@ export default function Books() {
             <span key={g} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300">
               Genre: {g}
               <button type="button" onClick={() => setFilterGenres((prev) => prev.filter((x) => x !== g))}
-                className="ml-0.5 hover:text-blue-900 dark:hover:text-blue-100 font-bold leading-none"
-                aria-label={`Remove genre filter ${g}`}>×</button>
+                className="ml-0.5 hover:text-blue-900 dark:hover:text-blue-100 font-bold leading-none">×</button>
             </span>
           ))}
+
+          {filterLanguage && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300">
+              Language: {filterLanguage}
+              <button type="button" onClick={() => setFilterLanguage("")}
+                className="ml-0.5 hover:text-purple-900 dark:hover:text-purple-100 font-bold leading-none">×</button>
+            </span>
+          )}
 
           {filterStatus && (
             <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs ${STATUS_STYLES[filterStatus]}`}>
               Status: {STATUS_LABELS[filterStatus]}
               <button type="button" onClick={() => setFilterStatus("")}
-                className="ml-0.5 font-bold leading-none opacity-70 hover:opacity-100"
-                aria-label={`Remove status filter ${filterStatus}`}>×</button>
+                className="ml-0.5 font-bold leading-none opacity-70 hover:opacity-100">×</button>
             </span>
           )}
         </div>
@@ -516,7 +644,7 @@ export default function Books() {
 
       {error && <div className="text-red-500 text-sm">{error}</div>}
 
-      {/* ── Mobile card list (hidden on md+) ──────────────────────────────── */}
+      {/* ── Mobile card list ────────────────────────────────────────────── */}
       <div className="md:hidden space-y-3">
         {showSkeleton
           ? [...Array(Math.min(limit, 5))].map((_, i) => (
@@ -532,11 +660,7 @@ export default function Books() {
               const isExpanded = expandedId === book._id;
               return (
                 <div key={book._id} className="bg-white dark:bg-gray-800 rounded-xl shadow overflow-hidden">
-                  {/* Card header — tappable */}
-                  <div
-                    onClick={() => toggleExpand(book._id)}
-                    className="flex items-start justify-between p-4 cursor-pointer"
-                  >
+                  <div onClick={() => toggleExpand(book._id)} className="flex items-start justify-between p-4 cursor-pointer">
                     <div className="flex-1 min-w-0 pr-3">
                       <p className="font-semibold text-gray-800 dark:text-gray-100 truncate">{book.title}</p>
                       <p className="text-sm text-gray-500 dark:text-gray-400 truncate mt-0.5">{book.author}</p>
@@ -554,65 +678,18 @@ export default function Books() {
                         )}
                       </div>
                     </div>
-                    <ChevronDown
-                      size={16}
-                      className={`shrink-0 mt-1 text-gray-400 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`}
-                    />
+                    <ChevronDown size={16} className={`shrink-0 mt-1 text-gray-400 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`} />
                   </div>
-
-                  {/* Expanded panel */}
                   {isExpanded && (
                     <div className="border-t border-gray-100 dark:border-gray-700 px-4 py-3 space-y-3 bg-gray-50 dark:bg-gray-700/50">
-                      {book.genre?.length > 0 && (
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="text-xs font-semibold text-gray-400 dark:text-gray-500 mr-1">Genres:</span>
-                          {book.genre.map((g, idx) => (
-                            <span key={idx} className="px-2 py-0.5 text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-full">
-                              {g}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      {book.description && (
-                        <div>
-                          <span className="text-xs font-semibold text-gray-400 dark:text-gray-500">Description:</span>
-                          <p className="text-sm text-gray-700 dark:text-gray-300 mt-1 leading-relaxed">{book.description}</p>
-                        </div>
-                      )}
-                      {(book.userStatus === "reading" || book.userStatus === "read") && (
-                        <div className="flex flex-wrap gap-3">
-                          {book.startedAt && (
-                            <div>
-                              <span className="text-xs font-semibold text-gray-400 dark:text-gray-500">Started: </span>
-                              <span className="text-xs text-gray-600 dark:text-gray-300">{formatDate(book.startedAt)}</span>
-                            </div>
-                          )}
-                          {book.userStatus === "read" && book.finishedAt && (
-                            <div>
-                              <span className="text-xs font-semibold text-gray-400 dark:text-gray-500">Finished: </span>
-                              <span className="text-xs text-gray-600 dark:text-gray-300">{formatDate(book.finishedAt)}</span>
-                            </div>
-                          )}
-                          {book.userStatus === "read" && book.rating && (
-                            <div className="flex items-center gap-1">
-                              <span className="text-xs font-semibold text-gray-400 dark:text-gray-500">Rating: </span>
-                              <StarDisplay rating={book.rating} />
-                            </div>
-                          )}
-                        </div>
-                      )}
+                      <ExpandedDetail book={book} />
                       <div className="flex gap-2 pt-1">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); openEditModal(book); }}
-                          className="flex-1 px-3 py-2 text-xs bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 text-center"
-                        >
+                        <button onClick={(e) => { e.stopPropagation(); openEditModal(book); }}
+                          className="flex-1 px-3 py-2 text-xs bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 text-center">
                           Edit
                         </button>
-                        <button
-                          disabled={deletingId === book._id}
-                          onClick={(e) => { e.stopPropagation(); openDeleteModal(book); }}
-                          className="flex-1 px-3 py-2 text-xs bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-50 text-center"
-                        >
+                        <button disabled={deletingId === book._id} onClick={(e) => { e.stopPropagation(); openDeleteModal(book); }}
+                          className="flex-1 px-3 py-2 text-xs bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-50 text-center">
                           {deletingId === book._id ? "Deleting..." : "Delete"}
                         </button>
                       </div>
@@ -624,11 +701,10 @@ export default function Books() {
         }
       </div>
 
-      {/* ── Desktop table (hidden on mobile) ──────────────────────────────── */}
+      {/* ── Desktop table ───────────────────────────────────────────────── */}
       <div className="hidden md:block bg-white dark:bg-gray-800 rounded-2xl shadow-lg overflow-hidden">
         <table className="w-full table-fixed text-left">
           <colgroup>
-            {/* chevron */}
             <col style={{ width: "4%" }} />
             <col style={{ width: "26%" }} />
             <col style={{ width: "17%" }} />
@@ -640,25 +716,16 @@ export default function Books() {
           <thead className="bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-sm">
             <tr>
               <th className="px-2 py-3 w-4" />
-              <th
-                className={`px-4 py-3 select-none transition-colors ${isAtlasSearch ? "text-gray-400 dark:text-gray-500" : "cursor-pointer hover:text-blue-600 dark:hover:text-blue-400"
-                  }`}
-                onClick={() => handleSort("title")}
-              >
+              <th className={`px-4 py-3 select-none transition-colors ${isAtlasSearch ? "text-gray-400 dark:text-gray-500" : "cursor-pointer hover:text-blue-600 dark:hover:text-blue-400"}`}
+                onClick={() => handleSort("title")}>
                 Title <SortIcon field="title" sortBy={sortBy} sortOrder={sortOrder} disabled={isAtlasSearch} />
               </th>
-              <th
-                className={`px-4 py-3 select-none transition-colors ${isAtlasSearch ? "text-gray-400 dark:text-gray-500" : "cursor-pointer hover:text-blue-600 dark:hover:text-blue-400"
-                  }`}
-                onClick={() => handleSort("author")}
-              >
+              <th className={`px-4 py-3 select-none transition-colors ${isAtlasSearch ? "text-gray-400 dark:text-gray-500" : "cursor-pointer hover:text-blue-600 dark:hover:text-blue-400"}`}
+                onClick={() => handleSort("author")}>
                 Author <SortIcon field="author" sortBy={sortBy} sortOrder={sortOrder} disabled={isAtlasSearch} />
               </th>
-              <th
-                className={`px-4 py-3 select-none transition-colors ${isAtlasSearch ? "text-gray-400 dark:text-gray-500" : "cursor-pointer hover:text-blue-600 dark:hover:text-blue-400"
-                  }`}
-                onClick={() => handleSort("house")}
-              >
+              <th className={`px-4 py-3 select-none transition-colors ${isAtlasSearch ? "text-gray-400 dark:text-gray-500" : "cursor-pointer hover:text-blue-600 dark:hover:text-blue-400"}`}
+                onClick={() => handleSort("house")}>
                 House <SortIcon field="house" sortBy={sortBy} sortOrder={sortOrder} disabled={isAtlasSearch} />
               </th>
               <th className="px-4 py-3">Genre</th>
@@ -682,24 +749,14 @@ export default function Books() {
                 const isExpanded = expandedId === book._id;
                 return (
                   <React.Fragment key={book._id}>
-                    <tr
-                      key={book._id}
-                      onClick={() => toggleExpand(book._id)}
-                      className="hover:bg-gray-50 dark:hover:bg-gray-700 transition cursor-pointer"
-                    >
+                    <tr onClick={() => toggleExpand(book._id)}
+                      className="hover:bg-gray-50 dark:hover:bg-gray-700 transition cursor-pointer">
                       <td className="px-2 py-3 text-gray-400 dark:text-gray-500">
-                        <ChevronDown
-                          size={15}
-                          className={`transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`}
-                        />
+                        <ChevronDown size={15} className={`transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`} />
                       </td>
-                      <td className="px-4 py-3 text-gray-800 dark:text-gray-100 truncate font-medium">
-                        {book.title}
-                      </td>
+                      <td className="px-4 py-3 text-gray-800 dark:text-gray-100 truncate font-medium">{book.title}</td>
                       <td className="px-4 py-3 text-gray-600 dark:text-gray-300 truncate">{book.author}</td>
                       <td className="px-4 py-3 text-gray-600 dark:text-gray-300 truncate">{book.house}</td>
-
-                      {/* Genre — first tag + overflow count */}
                       <td className="px-4 py-3">
                         {book.genre?.length > 0 ? (
                           <div className="flex items-center gap-1">
@@ -712,89 +769,33 @@ export default function Books() {
                               </span>
                             )}
                           </div>
-                        ) : (
-                          <span className="text-xs text-gray-400 dark:text-gray-500">—</span>
-                        )}
+                        ) : <span className="text-xs text-gray-400 dark:text-gray-500">—</span>}
                       </td>
-
-                      {/* Status */}
                       <td className="px-4 py-3">
                         {book.userStatus ? (
                           <span className={`px-2 py-0.5 text-xs rounded-full font-medium whitespace-nowrap ${STATUS_STYLES[book.userStatus]}`}>
                             {STATUS_LABELS[book.userStatus]}
                           </span>
-                        ) : (
-                          <span className="text-xs text-gray-400 dark:text-gray-500">—</span>
-                        )}
+                        ) : <span className="text-xs text-gray-400 dark:text-gray-500">—</span>}
                       </td>
-
-                      {/* Actions */}
                       <td className="px-4 py-3 text-right">
                         <div className="flex justify-end gap-2">
-                          <button
-                            onClick={(e) => { e.stopPropagation(); openEditModal(book); }}
-                            className="px-3 py-1 text-xs bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500"
-                          >
+                          <button onClick={(e) => { e.stopPropagation(); openEditModal(book); }}
+                            className="px-3 py-1 text-xs bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500">
                             Edit
                           </button>
-                          <button
-                            disabled={deletingId === book._id}
+                          <button disabled={deletingId === book._id}
                             onClick={(e) => { e.stopPropagation(); openDeleteModal(book); }}
-                            className="px-3 py-1 text-xs bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-50"
-                          >
+                            className="px-3 py-1 text-xs bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-50">
                             {deletingId === book._id ? "Deleting..." : "Delete"}
                           </button>
                         </div>
                       </td>
                     </tr>
-
-                    {/* Expanded row */}
                     {isExpanded && (
                       <tr key={`${book._id}-expanded`} className="bg-gray-50 dark:bg-gray-700/50">
                         <td colSpan={7} className="px-6 py-4 border-t border-gray-100 dark:border-gray-700">
-                          <div className="space-y-3">
-                            {book.genre?.length > 0 && (
-                              <div className="flex flex-wrap items-center gap-1.5">
-                                <span className="text-xs font-semibold text-gray-400 dark:text-gray-500 mr-1">Genres:</span>
-                                {book.genre.map((g, idx) => (
-                                  <span key={idx} className="px-2 py-0.5 text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-full">
-                                    {g}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                            <div>
-                              <span className="text-xs font-semibold text-gray-400 dark:text-gray-500">Description:</span>
-                              <p className={`text-sm leading-relaxed mt-1 ${book.description
-                                  ? "text-gray-700 dark:text-gray-300"
-                                  : "text-gray-400 dark:text-gray-500 italic"
-                                }`}>
-                                {book.description || "No description added yet."}
-                              </p>
-                            </div>
-                            {(book.userStatus === "reading" || book.userStatus === "read") && (
-                              <div className="flex flex-wrap gap-4 pt-1">
-                                {book.startedAt && (
-                                  <div>
-                                    <span className="text-xs font-semibold text-gray-400 dark:text-gray-500">Started: </span>
-                                    <span className="text-xs text-gray-600 dark:text-gray-300">{formatDate(book.startedAt)}</span>
-                                  </div>
-                                )}
-                                {book.userStatus === "read" && book.finishedAt && (
-                                  <div>
-                                    <span className="text-xs font-semibold text-gray-400 dark:text-gray-500">Finished: </span>
-                                    <span className="text-xs text-gray-600 dark:text-gray-300">{formatDate(book.finishedAt)}</span>
-                                  </div>
-                                )}
-                                {book.userStatus === "read" && book.rating && (
-                                  <div className="flex items-center gap-1">
-                                    <span className="text-xs font-semibold text-gray-400 dark:text-gray-500">Rating: </span>
-                                    <StarDisplay rating={book.rating} />
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
+                          <ExpandedDetail book={book} />
                         </td>
                       </tr>
                     )}
@@ -803,7 +804,6 @@ export default function Books() {
               })}
           </tbody>
         </table>
-
         {!showSkeleton && books.length === 0 && (
           <div className="p-10 text-center text-gray-500 dark:text-gray-400">No books found</div>
         )}
@@ -811,46 +811,32 @@ export default function Books() {
 
       {/* Pagination */}
       <div className="flex items-center justify-between mt-2 gap-2 md:gap-4">
-
-        {/* Left: total count — hidden on mobile */}
         <div className="hidden md:block w-32 text-sm text-gray-500 dark:text-gray-400">
           {!isAtlasSearch && totalBooks > 0 && (
             <span>{totalBooks} {totalBooks === 1 ? "book" : "books"}</span>
           )}
         </div>
 
-        {/* Centre: page numbers (desktop) / prev+next (mobile) */}
         <div className="flex items-center gap-1">
           {!isAtlasSearch && totalPages > 1 && (
             <>
               <button disabled={currentPage === 1 || isPaging} onClick={() => goToPage(currentPage - 1)}
-                className="px-3 py-2 rounded-lg bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 disabled:opacity-50 transition text-sm">
-                ←
-              </button>
-              {/* Page numbers — desktop only */}
+                className="px-3 py-2 rounded-lg bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 disabled:opacity-50 transition text-sm">←</button>
               <div className="hidden md:flex items-center gap-1">
                 {buildPageNumbers(currentPage, totalPages).map((page, idx) =>
                   page === "..." ? (
                     <span key={`e-${idx}`} className="px-2 py-2 text-gray-400 text-sm">…</span>
                   ) : (
                     <button key={page} disabled={isPaging} onClick={() => goToPage(page)}
-                      className={`px-3 py-2 rounded-lg transition text-sm ${page === currentPage
-                        ? "bg-blue-600 text-white font-semibold"
-                        : "bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-500"
-                        } disabled:opacity-50`}>
+                      className={`px-3 py-2 rounded-lg transition text-sm ${page === currentPage ? "bg-blue-600 text-white font-semibold" : "bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-500"} disabled:opacity-50`}>
                       {page}
                     </button>
                   )
                 )}
               </div>
-              {/* Page indicator — mobile only */}
-              <span className="md:hidden text-sm text-gray-500 dark:text-gray-400 px-2">
-                {currentPage} / {totalPages}
-              </span>
+              <span className="md:hidden text-sm text-gray-500 dark:text-gray-400 px-2">{currentPage} / {totalPages}</span>
               <button disabled={currentPage === totalPages || isPaging} onClick={() => goToPage(currentPage + 1)}
-                className="px-3 py-2 rounded-lg bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 disabled:opacity-50 transition text-sm">
-                →
-              </button>
+                className="px-3 py-2 rounded-lg bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 disabled:opacity-50 transition text-sm">→</button>
             </>
           )}
 
@@ -866,25 +852,19 @@ export default function Books() {
                   setIsPaging(true);
                   fetchSearch(search, activeFilters, cursor, "prev");
                 }}
-                className="px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 disabled:opacity-50 text-sm"
-              >
+                className="px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 disabled:opacity-50 text-sm">
                 {isPaging ? "Loading..." : "Previous"}
               </button>
               <button
                 disabled={!searchCursor || isPaging}
-                onClick={() => {
-                  setIsPaging(true);
-                  fetchSearch(search, activeFilters, searchCursor, "next");
-                }}
-                className="px-4 py-2 rounded-lg bg-blue-600 text-white disabled:opacity-50 text-sm"
-              >
+                onClick={() => { setIsPaging(true); fetchSearch(search, activeFilters, searchCursor, "next"); }}
+                className="px-4 py-2 rounded-lg bg-blue-600 text-white disabled:opacity-50 text-sm">
                 {isPaging ? "Loading..." : "Next"}
               </button>
             </>
           )}
         </div>
 
-        {/* Right: per page */}
         <div className="flex items-center gap-2 justify-end">
           <span className="hidden md:inline text-sm text-gray-600 dark:text-gray-300 whitespace-nowrap">Per page</span>
           <select
@@ -892,7 +872,7 @@ export default function Books() {
             onChange={(e) => {
               const newLimit = Number(e.target.value);
               setLimit(newLimit);
-              const filters = { house: filterHouse, genres: filterGenres, status: filterStatus };
+              const filters = { house: filterHouse, genres: filterGenres, language: filterLanguage, status: filterStatus };
               setSearchCursor(null);
               setSearchPrevCursors([]);
               setExpandedId(null);
