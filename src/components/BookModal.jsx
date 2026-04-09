@@ -277,6 +277,23 @@ export default function BookModal({
                         )}
                     </div>
 
+                    {/* Make Public toggle — only shown when a status is set */}
+                    {formData.userStatus && (
+                        <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600">
+                            <div>
+                                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Show on public page</p>
+                                <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Anyone with your public link can see this book</p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setFormData({ ...formData, isPublic: !formData.isPublic })}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${formData.isPublic ? "bg-blue-600" : "bg-gray-300 dark:bg-gray-600"}`}
+                            >
+                                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${formData.isPublic ? "translate-x-6" : "translate-x-1"}`} />
+                            </button>
+                        </div>
+                    )}
+
                     {/* Reading dates */}
                     {(formData.userStatus === "reading" || formData.userStatus === "read") && (
                         <div className={formData.userStatus === "read" ? "grid grid-cols-2 gap-3" : ""}>

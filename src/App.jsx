@@ -6,6 +6,7 @@ import Dashboard from "./pages/Dashboard";
 import Discover from "./pages/Discover";
 import Books from "./pages/Books";
 import Admin from "./pages/Admin";
+import PublicBooks from "./pages/PublicBooks";
 import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -40,6 +41,9 @@ function App() {
           {/* Any unknown protected path falls back to dashboard */}
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>
+
+        {/* Public book sharing page — no auth required */}
+        <Route path="/public/:userId" element={<PublicBooks />} />
 
         {/* Any unknown public path falls back to login */}
         <Route path="*" element={<Navigate to="/" replace />} />

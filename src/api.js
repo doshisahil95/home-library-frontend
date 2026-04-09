@@ -152,3 +152,16 @@ export function updateReferenceItem(type, id, name) {
 export function deleteReferenceItem(type, id) {
     return request(`/reference-data/${type}/${id}`, { method: "DELETE" });
 }
+
+// ─── Public (no auth) ────────────────────────────────────────────────────────
+// Plain fetch — no cookie, no auth header. Works for anyone with the link.
+
+export async function getPublicBooks(userId) {
+    const BASE_URL = import.meta.env.VITE_API_BASE
+        ? `${import.meta.env.VITE_API_BASE}`
+        : "/api";
+    const res = await fetch(`${BASE_URL}/public/${userId}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message);
+    return data;
+}

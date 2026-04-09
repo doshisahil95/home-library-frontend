@@ -87,6 +87,7 @@ export default function Layout() {
       const user = JSON.parse(localStorage.getItem("user"));
       if (user?.email) setUserInitial(user.email.charAt(0).toUpperCase());
       if (user?.role === "admin") setIsAdmin(true);
+      if (user?.id) setUserId(user.id);
       const savedTheme = user?.theme || "light";
       setTheme(savedTheme);
       document.documentElement.classList.toggle("dark", savedTheme === "dark");
@@ -257,7 +258,7 @@ export default function Layout() {
 
       {/* ── Settings Modal ────────────────────────────────────────────────── */}
       {settingsOpen && (
-        <Modal title="Settings" onClose={() => setSettingsOpen(false)}>
+        <Modal title="Settings" onClose={() => setSettingsOpen(false)} userId={userId}>
           <div className="space-y-6">
             <div>
               <h3 className="text-md font-semibold text-gray-800 dark:text-gray-100">Appearance</h3>
@@ -286,6 +287,40 @@ export default function Layout() {
   );
 }
 
+function PublicLinkCopy({ userId }) {
+  const [copied, setCopied] = useState(false);
+  const BASE = import.meta.env.VITE_API_BASE
+    ? window.location.origin
+    : window.location.origin;
+  const url = userId ? `${BASE}/public/${userId}` : "";
+
+  const handleCopy = () => {
+    if (!url) return;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  if (!userId) return null;
+
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        readOnly
+        value={url}
+        className="flex-1 px-3 py-1.5 text-xs rounded-lg border bg-gray-50 dark:bg-gray-700 dark:text-gray-300 text-gray-600 truncate"
+      />
+      <button
+        onClick={handleCopy}
+        className="shrink-0 px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition"
+      >
+        {copied ? "Copied!" : "Copy"}
+      </button>
+    </div>
+  );
+}
+
 function Modal({ title, children, onClose }) {
   return (
     <div
@@ -298,9 +333,16 @@ function Modal({ title, children, onClose }) {
       >
         <h2 className="text-lg font-bold mb-4 text-gray-800 dark:text-white">{title}</h2>
         {children}
+        <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700 space-y-2">
+          <h3 className="text-md font-semibold text-gray-800 dark:text-gray-100">Public Library Link</h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Share this link so others can view the books you've made public.
+          </p>
+          <PublicLinkCopy userId={userId} />
+        </div>
         <button
           onClick={onClose}
-          className="mt-6 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-100 px-4 py-2 rounded hover:bg-gray-300 dark:hover:bg-gray-600"
+          className="mt-4 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-100 px-4 py-2 rounded hover:bg-gray-300 dark:hover:bg-gray-600"
         >
           Close
         </button>
