@@ -122,3 +122,33 @@ export function getDiscoverData() {
 export function getGenres() { return request("/reference-data/genres"); }
 export function getHouses() { return request("/reference-data/houses"); }
 export function getLanguages() { return request("/reference-data/languages"); }
+
+// ─── Admin ────────────────────────────────────────────────────────────────────
+
+export function getAdminUsers() {
+    return request("/admin/users");
+}
+
+export function addAdminUser(user) {
+    return request("/admin/users", { method: "POST", body: JSON.stringify(user) });
+}
+
+export function changeUserRole(id, role) {
+    return request(`/admin/users/${id}/role`, { method: "PATCH", body: JSON.stringify({ role }) });
+}
+
+export function sendUserResetOTP(id) {
+    return request(`/admin/users/${id}/reset-otp`, { method: "POST" });
+}
+
+export function createReferenceItem(type, name) {
+    return request(`/reference-data/${type}`, { method: "POST", body: JSON.stringify({ name }) });
+}
+
+export function updateReferenceItem(type, id, name) {
+    return request(`/reference-data/${type}/${id}`, { method: "PUT", body: JSON.stringify({ name }) });
+}
+
+export function deleteReferenceItem(type, id) {
+    return request(`/reference-data/${type}/${id}`, { method: "DELETE" });
+}

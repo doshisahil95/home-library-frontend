@@ -1,6 +1,6 @@
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useState, useEffect, useRef } from "react";
-import { LayoutDashboard, BookOpen, Compass, ChevronLeft, ChevronRight, Menu, X } from "lucide-react";
+import { LayoutDashboard, BookOpen, Compass, ShieldCheck, ChevronLeft, ChevronRight, Menu, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { updateTheme as apiUpdateTheme } from "../api";
 import { useSession } from "./SessionContext";
@@ -11,9 +11,7 @@ const NAV_ITEMS = [
   { path: "/discover", label: "Discover", icon: Compass },
 ];
 
-// Defined outside Layout so it isn't re-created on every render.
-// Receives only what it needs — no closure over Layout's full state.
-function SidebarContent({ isCollapsed, currentPath }) {
+function SidebarContent({ isCollapsed, currentPath, isAdmin }) {
   const linkClasses = (path) =>
     `flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${currentPath === path
       ? "bg-blue-600 text-white"
@@ -44,12 +42,26 @@ function SidebarContent({ isCollapsed, currentPath }) {
               <Icon size={18} className="shrink-0" />
               {!isCollapsed && <span className="text-sm font-medium">{label}</span>}
             </Link>
-            {/* Separator between nav items */}
             {idx < NAV_ITEMS.length - 1 && (
               <hr className="my-2 border-gray-200 dark:border-gray-700" />
             )}
           </div>
         ))}
+
+        {/* Admin nav item — only visible to admins */}
+        {isAdmin && (
+          <div>
+            <hr className="my-2 border-gray-200 dark:border-gray-700" />
+            <Link
+              to="/admin"
+              title={isCollapsed ? "Admin" : undefined}
+              className={`${linkClasses("/admin")} ${isCollapsed ? "justify-center px-2" : ""}`}
+            >
+              <ShieldCheck size={18} className="shrink-0" />
+              {!isCollapsed && <span className="text-sm font-medium">Admin</span>}
+            </Link>
+          </div>
+        )}
       </nav>
     </div>
   );
@@ -62,6 +74,7 @@ export default function Layout() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [userInitial, setUserInitial] = useState("?");
+  const [isAdmin, setIsAdmin] = useState(false);
   const [theme, setTheme] = useState("light");
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -73,13 +86,13 @@ export default function Layout() {
     try {
       const user = JSON.parse(localStorage.getItem("user"));
       if (user?.email) setUserInitial(user.email.charAt(0).toUpperCase());
+      if (user?.role === "admin") setIsAdmin(true);
       const savedTheme = user?.theme || "light";
       setTheme(savedTheme);
       document.documentElement.classList.toggle("dark", savedTheme === "dark");
     } catch { /* ignore corrupt localStorage */ }
   }, []);
 
-  // Close dropdown on outside click
   useEffect(() => {
     const handleOutsideClick = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
@@ -90,12 +103,10 @@ export default function Layout() {
     return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, [dropdownOpen]);
 
-  // Close mobile sidebar on route change
   useEffect(() => {
     setMobileOpen(false);
   }, [location.pathname]);
 
-  // Lock body scroll when mobile sidebar is open
   useEffect(() => {
     document.body.style.overflow = mobileOpen ? "hidden" : "";
     return () => { document.body.style.overflow = ""; };
@@ -131,9 +142,8 @@ export default function Layout() {
           ${collapsed ? "w-16 p-3" : "w-64 p-6"}
         `}
       >
-        <SidebarContent isCollapsed={collapsed} currentPath={location.pathname} />
+        <SidebarContent isCollapsed={collapsed} currentPath={location.pathname} isAdmin={isAdmin} />
 
-        {/* Collapse toggle — right edge, vertically centred, desktop only */}
         <button
           onClick={() => setCollapsed((c) => !c)}
           title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
@@ -175,7 +185,7 @@ export default function Layout() {
         >
           <X size={20} />
         </button>
-        <SidebarContent isCollapsed={false} currentPath={location.pathname} />
+        <SidebarContent isCollapsed={false} currentPath={location.pathname} isAdmin={isAdmin} />
       </aside>
 
       {/* ── Main Content ─────────────────────────────────────────────────── */}
@@ -195,7 +205,6 @@ export default function Layout() {
             </h1>
           </div>
 
-          {/* Avatar + dropdown */}
           <div className="relative" ref={dropdownRef}>
             <div
               onClick={() => setDropdownOpen((p) => !p)}

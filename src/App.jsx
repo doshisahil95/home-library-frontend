@@ -5,6 +5,7 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Discover from "./pages/Discover";
 import Books from "./pages/Books";
+import Admin from "./pages/Admin";
 import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -34,6 +35,7 @@ function App() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/discover" element={<Discover />} />
           <Route path="/books" element={<Books />} />
+          <Route path="/admin" element={<Admin />} />
 
           {/* Any unknown protected path falls back to dashboard */}
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
