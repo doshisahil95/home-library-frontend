@@ -165,3 +165,38 @@ export async function getPublicBooks(userId) {
     if (!res.ok) throw new Error(data.message);
     return data;
 }
+
+// ─── CSV bulk upload ──────────────────────────────────────────────────────────
+
+export function validateCSV(csvText) {
+    return request("/admin/csv/validate", {
+        method: "POST",
+        body: JSON.stringify({ csv: csvText }),
+    });
+}
+
+export function importCSV(csvText, stopOnError) {
+    return request("/admin/csv/import", {
+        method: "POST",
+        body: JSON.stringify({ csvText, stopOnError }),
+    });
+}
+
+// Generates and triggers download of a sample CSV file.
+// Called entirely in the browser — no server request needed.
+export function downloadSampleCSV() {
+    const header = "title,author,house,genre,language,locationInHouse,description";
+    const rows = [
+        '"The Alchemist","Paulo Coelho","Brahma Courts","Fiction;Fantasy","English","Shelf 1 Row 2","A journey of self-discovery."',
+        '"Sapiens","Yuval Noah Harari","Marvel","Biography;Science","English","Shelf 3","A brief history of humankind."',
+        '"Cosmos","Carl Sagan","Brahma Courts","Science","English","","An exploration of the universe."',
+    ];
+    const csv = [header, ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "sample_books.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+}

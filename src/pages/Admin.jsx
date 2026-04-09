@@ -13,6 +13,9 @@ import {
     createReferenceItem,
     updateReferenceItem,
     deleteReferenceItem,
+    validateCSV,
+    importCSV,
+    downloadSampleCSV,
 } from "../api";
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
@@ -293,6 +296,246 @@ function ReferenceSection({ title, color, items, loading, onAdd, onEdit, onDelet
     );
 }
 
+
+// ─── CSV Import Tab ───────────────────────────────────────────────────────────
+
+function CSVImportTab() {
+    const [csvText, setCsvText] = useState("");
+    const [fileName, setFileName] = useState("");
+    const [stopOnError, setStopOnError] = useState(false);
+    const [validating, setValidating] = useState(false);
+    const [importing, setImporting] = useState(false);
+
+    // Phase: idle | validated | imported
+    const [phase, setPhase] = useState("idle");
+    const [validResult, setValidResult] = useState(null);  // { validCount, errorCount, errors }
+    const [importResult, setImportResult] = useState(null); // { added, errorCount, errors, stoppedEarly }
+
+    const handleFileChange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        if (!file.name.endsWith(".csv")) {
+            toast.error("Please upload a .csv file");
+            return;
+        }
+        setFileName(file.name);
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            setCsvText(ev.target.result);
+            setPhase("idle");
+            setValidResult(null);
+            setImportResult(null);
+        };
+        reader.readAsText(file);
+    };
+
+    const handleValidate = async () => {
+        if (!csvText) { toast.error("Please upload a CSV file first"); return; }
+        try {
+            setValidating(true);
+            const result = await validateCSV(csvText);
+            setValidResult(result);
+            setPhase("validated");
+        } catch (err) {
+            toast.error(err.message || "Validation failed");
+        } finally {
+            setValidating(false);
+        }
+    };
+
+    const handleImport = async () => {
+        if (!csvText) return;
+        try {
+            setImporting(true);
+            const result = await importCSV(csvText, stopOnError);
+            setImportResult(result);
+            setPhase("imported");
+            if (result.added > 0) toast.success(`${result.added} book${result.added === 1 ? "" : "s"} imported`);
+        } catch (err) {
+            toast.error(err.message || "Import failed");
+        } finally {
+            setImporting(false);
+        }
+    };
+
+    const handleReset = () => {
+        setCsvText("");
+        setFileName("");
+        setPhase("idle");
+        setValidResult(null);
+        setImportResult(null);
+    };
+
+    return (
+        <div className="space-y-5 max-w-3xl">
+            <div className="flex items-center justify-between">
+                <div>
+                    <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200">Bulk Import Books</h2>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                        Upload a CSV file to add multiple books at once. Validate first, then import.
+                    </p>
+                </div>
+                <button
+                    onClick={downloadSampleCSV}
+                    className="shrink-0 px-4 py-2 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition"
+                >
+                    ↓ Sample CSV
+                </button>
+            </div>
+
+            {/* CSV format reference */}
+            <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4 text-xs text-gray-500 dark:text-gray-400 space-y-1 border border-gray-200 dark:border-gray-600">
+                <p className="font-semibold text-gray-600 dark:text-gray-300 mb-2">CSV Format</p>
+                <p><span className="font-medium">Required:</span> title, author, house, genre</p>
+                <p><span className="font-medium">Optional:</span> language, locationInHouse, description</p>
+                <p><span className="font-medium">Multiple genres:</span> separate with semicolon — e.g. <code className="bg-gray-200 dark:bg-gray-600 px-1 rounded">Fiction;Fantasy</code></p>
+                <p><span className="font-medium">Max rows:</span> 500 per upload</p>
+            </div>
+
+            {/* File upload */}
+            <div className="space-y-3">
+                <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition bg-white dark:bg-gray-800">
+                    <div className="flex flex-col items-center gap-1">
+                        <span className="text-2xl">📄</span>
+                        <span className="text-sm text-gray-500 dark:text-gray-400">
+                            {fileName ? fileName : "Click to upload CSV"}
+                        </span>
+                        {fileName && (
+                            <span className="text-xs text-green-600 dark:text-green-400">File loaded</span>
+                        )}
+                    </div>
+                    <input type="file" accept=".csv" className="hidden" onChange={handleFileChange} />
+                </label>
+
+                {/* Stop on error toggle */}
+                <div className="flex items-center justify-between px-4 py-3 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+                    <div>
+                        <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Stop on first error</p>
+                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                            When on, import stops at the first invalid row. When off, errors are skipped.
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setStopOnError((v) => !v)}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${stopOnError ? "bg-blue-600" : "bg-gray-300 dark:bg-gray-600"}`}
+                    >
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${stopOnError ? "translate-x-6" : "translate-x-1"}`} />
+                    </button>
+                </div>
+
+                {/* Action buttons */}
+                <div className="flex gap-3">
+                    <button
+                        onClick={handleValidate}
+                        disabled={!csvText || validating || importing}
+                        className="px-5 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                    >
+                        {validating ? "Validating..." : "Validate"}
+                    </button>
+                    {phase === "validated" && validResult?.validCount > 0 && (
+                        <button
+                            onClick={handleImport}
+                            disabled={importing}
+                            className="px-5 py-2 rounded-lg bg-green-600 text-white text-sm hover:bg-green-700 disabled:opacity-50 transition"
+                        >
+                            {importing ? "Importing..." : `Confirm & Import ${validResult.validCount} book${validResult.validCount === 1 ? "" : "s"}`}
+                        </button>
+                    )}
+                    {phase !== "idle" && (
+                        <button
+                            onClick={handleReset}
+                            className="px-5 py-2 rounded-lg bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 text-sm hover:bg-gray-300 dark:hover:bg-gray-500 transition"
+                        >
+                            Reset
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            {/* Validation result */}
+            {phase === "validated" && validResult && (
+                <div className="space-y-3">
+                    <div className="flex gap-3">
+                        {validResult.validCount > 0 && (
+                            <div className="flex-1 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl px-4 py-3">
+                                <p className="text-sm font-semibold text-green-700 dark:text-green-400">
+                                    ✓ {validResult.validCount} row{validResult.validCount === 1 ? "" : "s"} ready to import
+                                </p>
+                            </div>
+                        )}
+                        {validResult.errorCount > 0 && (
+                            <div className="flex-1 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl px-4 py-3">
+                                <p className="text-sm font-semibold text-red-700 dark:text-red-400">
+                                    ✗ {validResult.errorCount} row{validResult.errorCount === 1 ? "" : "s"} with errors
+                                </p>
+                            </div>
+                        )}
+                        {validResult.validCount === 0 && validResult.errorCount === 0 && (
+                            <div className="flex-1 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl px-4 py-3">
+                                <p className="text-sm text-gray-500 dark:text-gray-400">No rows found in file</p>
+                            </div>
+                        )}
+                    </div>
+                    <ErrorList errors={validResult.errors} />
+                </div>
+            )}
+
+            {/* Import result */}
+            {phase === "imported" && importResult && (
+                <div className="space-y-3">
+                    <div className="flex gap-3">
+                        {importResult.added > 0 && (
+                            <div className="flex-1 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl px-4 py-3">
+                                <p className="text-sm font-semibold text-green-700 dark:text-green-400">
+                                    ✓ {importResult.added} book{importResult.added === 1 ? "" : "s"} imported successfully
+                                </p>
+                            </div>
+                        )}
+                        {importResult.errorCount > 0 && (
+                            <div className="flex-1 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl px-4 py-3">
+                                <p className="text-sm font-semibold text-red-700 dark:text-red-400">
+                                    ✗ {importResult.errorCount} row{importResult.errorCount === 1 ? "" : "s"} not imported
+                                    {importResult.stoppedEarly && " — stopped early"}
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                    <ErrorList errors={importResult.errors} />
+                </div>
+            )}
+        </div>
+    );
+}
+
+function ErrorList({ errors }) {
+    if (!errors || errors.length === 0) return null;
+    return (
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div className="px-4 py-2 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                    Error Details
+                </p>
+            </div>
+            <div className="divide-y divide-gray-100 dark:divide-gray-700 max-h-72 overflow-y-auto">
+                {errors.map((err, i) => (
+                    <div key={i} className="px-4 py-3 space-y-1">
+                        <p className="text-sm font-medium text-gray-800 dark:text-gray-100">
+                            Row {err.row}
+                            {err.title && err.title !== "(no title)" && (
+                                <span className="font-normal text-gray-500 dark:text-gray-400"> — {err.title}</span>
+                            )}
+                        </p>
+                        {err.reasons.map((r, j) => (
+                            <p key={j} className="text-xs text-red-600 dark:text-red-400 ml-2">• {r}</p>
+                        ))}
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
 // ─── Main Admin page ──────────────────────────────────────────────────────────
 
 export default function Admin() {
@@ -423,6 +666,7 @@ export default function Admin() {
         { id: "users", label: "Users" },
         { id: "refdata", label: "Reference Data" },
         { id: "reset", label: "Password Reset" },
+        { id: "csv", label: "Bulk Import" },
     ];
 
     return (
@@ -660,6 +904,12 @@ export default function Admin() {
                         )}
                     </div>
                 </div>
+            )}
+
+
+            {/* ── Bulk Import tab ───────────────────────────────────────────────── */}
+            {activeTab === "csv" && (
+                <CSVImportTab />
             )}
 
             {/* ── Modals ─────────────────────────────────────────────────────────── */}
