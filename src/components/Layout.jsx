@@ -2,7 +2,7 @@ import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useState, useEffect, useRef } from "react";
 import { LayoutDashboard, BookOpen, Compass, ShieldCheck, ChevronLeft, ChevronRight, Menu, X } from "lucide-react";
 import toast from "react-hot-toast";
-import { updateTheme as apiUpdateTheme } from "../api";
+import { updateTheme as apiUpdateTheme, updateProfile, makeAllPrivate, getPublicCount } from "../api";
 import { useSession } from "./SessionContext";
 
 const NAV_ITEMS = [
@@ -13,34 +13,34 @@ const NAV_ITEMS = [
 
 function SidebarContent({ isCollapsed, currentPath, isAdmin }) {
   const linkClasses = (path) =>
-    `flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${currentPath === path
+    `flex items-center gap-3 py-2 rounded-lg transition-colors ${currentPath === path
       ? "bg-blue-600 text-white"
       : "text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
     }`;
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full py-6">
       {/* Logo */}
-      <div className={`flex items-center gap-2 mb-6 px-1 ${isCollapsed ? "justify-center" : ""}`}>
+      <div className={`flex items-center gap-2 mb-6 h-8 ${isCollapsed ? "justify-center px-2" : "px-4"}`}>
         <span className="text-2xl leading-none">📚</span>
-        {!isCollapsed && (
-          <span className="text-lg font-bold text-gray-800 dark:text-gray-100 whitespace-nowrap">
-            Home Library
-          </span>
-        )}
+        <span className={`text-lg font-bold text-gray-800 dark:text-gray-100 whitespace-nowrap transition-all duration-150 ${isCollapsed ? "opacity-0 w-0 overflow-hidden" : "opacity-100 delay-150"
+          }`}>
+          Home Library
+        </span>
       </div>
 
       {/* Nav */}
-      <nav className="space-y-1 flex-1">
+      <nav className="space-y-1 flex-1 px-2">
         {NAV_ITEMS.map(({ path, label, icon: Icon }, idx) => (
           <div key={path}>
             <Link
               to={path}
               title={isCollapsed ? label : undefined}
-              className={`${linkClasses(path)} ${isCollapsed ? "justify-center px-2" : ""}`}
+              className={`${linkClasses(path)} ${isCollapsed ? "justify-center px-2" : "px-4"}`}
             >
               <Icon size={18} className="shrink-0" />
-              {!isCollapsed && <span className="text-sm font-medium">{label}</span>}
+              <span className={`text-sm font-medium whitespace-nowrap transition-all duration-150 ${isCollapsed ? "opacity-0 w-0 overflow-hidden" : "opacity-100 delay-150"
+                }`}>{label}</span>
             </Link>
             {idx < NAV_ITEMS.length - 1 && (
               <hr className="my-2 border-gray-200 dark:border-gray-700" />
@@ -55,10 +55,11 @@ function SidebarContent({ isCollapsed, currentPath, isAdmin }) {
             <Link
               to="/admin"
               title={isCollapsed ? "Admin" : undefined}
-              className={`${linkClasses("/admin")} ${isCollapsed ? "justify-center px-2" : ""}`}
+              className={`${linkClasses("/admin")} ${isCollapsed ? "justify-center px-2" : "px-4"}`}
             >
               <ShieldCheck size={18} className="shrink-0" />
-              {!isCollapsed && <span className="text-sm font-medium">Admin</span>}
+              <span className={`text-sm font-medium whitespace-nowrap transition-all duration-150 ${isCollapsed ? "opacity-0 w-0 overflow-hidden" : "opacity-100 delay-150"
+                }`}>Admin</span>
             </Link>
           </div>
         )}
@@ -74,8 +75,12 @@ export default function Layout() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [userInitial, setUserInitial] = useState("?");
+  const [userName, setUserName] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
+  const [userId, setUserId] = useState("");
   const [theme, setTheme] = useState("light");
+  const [publicCount, setPublicCount] = useState(null);
+  const [makingPrivate, setMakingPrivate] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -86,7 +91,8 @@ export default function Layout() {
     try {
       const user = JSON.parse(localStorage.getItem("user"));
       if (user?.email) setUserInitial(user.email.charAt(0).toUpperCase());
-      if (user?.role === "admin") setIsAdmin(true);
+      if (user?.name) setUserName(user.name);
+      if (user?.role === "admin" || user?.role === "superadmin") setIsAdmin(true);
       if (user?.id) setUserId(user.id);
       const savedTheme = user?.theme || "light";
       setTheme(savedTheme);
@@ -131,6 +137,28 @@ export default function Layout() {
 
   const handleLogout = () => sessionLogout();
 
+  const handleOpenSettings = async () => {
+    setSettingsOpen(true);
+    setDropdownOpen(false);
+    try {
+      const res = await getPublicCount();
+      setPublicCount(res.count);
+    } catch { /* ignore */ }
+  };
+
+  const handleMakeAllPrivate = async () => {
+    try {
+      setMakingPrivate(true);
+      const res = await makeAllPrivate();
+      setPublicCount(0);
+      toast.success(`${res.updated} book${res.updated === 1 ? "" : "s"} made private`);
+    } catch (err) {
+      toast.error(err.message || "Failed to make books private");
+    } finally {
+      setMakingPrivate(false);
+    }
+  };
+
   return (
     <div className="flex min-h-screen bg-gray-100 dark:bg-gray-900">
 
@@ -140,7 +168,7 @@ export default function Layout() {
           relative hidden md:flex flex-col flex-shrink-0
           bg-white dark:bg-gray-800 shadow-lg
           transition-all duration-300 ease-in-out
-          ${collapsed ? "w-16 p-3" : "w-64 p-6"}
+          ${collapsed ? "w-16" : "w-64"}
         `}
       >
         <SidebarContent isCollapsed={collapsed} currentPath={location.pathname} isAdmin={isAdmin} />
@@ -217,7 +245,7 @@ export default function Layout() {
             {dropdownOpen && (
               <div className="absolute right-0 mt-2 w-52 bg-white dark:bg-gray-800 rounded-lg shadow-lg py-2 z-50">
                 <button
-                  onClick={() => { setSettingsOpen(true); setDropdownOpen(false); }}
+                  onClick={handleOpenSettings}
                   className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200"
                 >
                   ⚙️ Settings
@@ -258,7 +286,7 @@ export default function Layout() {
 
       {/* ── Settings Modal ────────────────────────────────────────────────── */}
       {settingsOpen && (
-        <Modal title="Settings" onClose={() => setSettingsOpen(false)} userId={userId}>
+        <Modal title="Settings" onClose={() => setSettingsOpen(false)} userId={userId} userName={userName} setUserName={setUserName} publicCount={publicCount} onMakeAllPrivate={handleMakeAllPrivate} makingPrivate={makingPrivate}>
           <div className="space-y-6">
             <div>
               <h3 className="text-md font-semibold text-gray-800 dark:text-gray-100">Appearance</h3>
@@ -287,12 +315,11 @@ export default function Layout() {
   );
 }
 
+// ─── Public link copy ─────────────────────────────────────────────────────────
+
 function PublicLinkCopy({ userId }) {
   const [copied, setCopied] = useState(false);
-  const BASE = import.meta.env.VITE_API_BASE
-    ? window.location.origin
-    : window.location.origin;
-  const url = userId ? `${BASE}/public/${userId}` : "";
+  const url = userId ? `${window.location.origin}/public/${userId}` : "";
 
   const handleCopy = () => {
     if (!url) return;
@@ -321,7 +348,9 @@ function PublicLinkCopy({ userId }) {
   );
 }
 
-function Modal({ title, children, onClose }) {
+// ─── Settings modal ───────────────────────────────────────────────────────────
+
+function Modal({ title, children, onClose, userId, userName, setUserName, publicCount, onMakeAllPrivate, makingPrivate }) {
   return (
     <div
       className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50"
@@ -333,13 +362,38 @@ function Modal({ title, children, onClose }) {
       >
         <h2 className="text-lg font-bold mb-4 text-gray-800 dark:text-white">{title}</h2>
         {children}
+
+        {/* Name edit */}
         <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700 space-y-2">
-          <h3 className="text-md font-semibold text-gray-800 dark:text-gray-100">Public Library Link</h3>
+          <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Display Name</h3>
+          <NameEditor userName={userName} setUserName={setUserName} />
+        </div>
+
+        {/* Public sharing section */}
+        <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 space-y-2">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Public Library Link</h3>
+            {publicCount !== null && publicCount > 0 && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 font-medium">
+                {publicCount} book{publicCount === 1 ? "" : "s"} shared
+              </span>
+            )}
+          </div>
           <p className="text-sm text-gray-500 dark:text-gray-400">
             Share this link so others can view the books you've made public.
           </p>
           <PublicLinkCopy userId={userId} />
+          {publicCount !== null && publicCount > 0 && (
+            <button
+              onClick={onMakeAllPrivate}
+              disabled={makingPrivate}
+              className="mt-2 w-full px-3 py-2 text-sm rounded-lg border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 transition"
+            >
+              {makingPrivate ? "Making private..." : `Make all ${publicCount} book${publicCount === 1 ? "" : "s"} private`}
+            </button>
+          )}
         </div>
+
         <button
           onClick={onClose}
           className="mt-4 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-100 px-4 py-2 rounded hover:bg-gray-300 dark:hover:bg-gray-600"

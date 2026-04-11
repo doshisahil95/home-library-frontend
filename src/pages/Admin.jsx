@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Eye, EyeOff } from "lucide-react";
+
 import toast from "react-hot-toast";
 import {
     getAdminUsers,
     addAdminUser,
     changeUserRole,
-    sendUserResetOTP,
+    deleteAdminUser,
+    approvePasswordReset,
+    revokePasswordReset,
     getGenres,
     getHouses,
     getLanguages,
@@ -83,22 +85,18 @@ function PasswordRules({ checks }) {
 // ─── Add User Modal ───────────────────────────────────────────────────────────
 
 function AddUserModal({ onClose, onAdded }) {
-    const [form, setForm] = useState({ name: "", email: "", password: "", role: "user" });
-    const [showPassword, setShowPassword] = useState(false);
+    const [form, setForm] = useState({ name: "", email: "", role: "user" });
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
     const [showConfirm, setShowConfirm] = useState(false);
-    const checks = usePasswordChecks(form.password);
-    const isPasswordStrong = Object.values(checks).every(Boolean);
+
+    // Fix 4 — label/button text matches role
+    const roleLabel = form.role === "admin" ? "Admin" : "User";
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        if (!form.name.trim() || !form.email.trim() || !form.password) {
-            setError("All fields are required");
-            return;
-        }
-        if (!isPasswordStrong) {
-            setError("Password does not meet requirements");
+        if (!form.name.trim() || !form.email.trim()) {
+            setError("Name and email are required");
             return;
         }
         setShowConfirm(true);
@@ -109,7 +107,7 @@ function AddUserModal({ onClose, onAdded }) {
             setLoading(true);
             setError("");
             await addAdminUser(form);
-            toast.success(`User ${form.name} added`);
+            toast.success(`${roleLabel} ${form.name} added. They can set their password on first login.`);
             onAdded();
             onClose();
         } catch (err) {
@@ -123,8 +121,11 @@ function AddUserModal({ onClose, onAdded }) {
         <>
             <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50 px-4" onClick={onClose}>
                 <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-md shadow-xl" onClick={(e) => e.stopPropagation()}>
-                    <h2 className="text-xl font-bold mb-4 text-gray-800 dark:text-gray-100">Add User</h2>
+                    <h2 className="text-xl font-bold mb-4 text-gray-800 dark:text-gray-100">Add {roleLabel}</h2>
                     {error && <div className="text-red-500 text-sm mb-3">{error}</div>}
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                        The new {roleLabel.toLowerCase()} will set their own password when they first log in.
+                    </p>
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <input
                             type="text" placeholder="Full name" value={form.name}
@@ -136,19 +137,6 @@ function AddUserModal({ onClose, onAdded }) {
                             onChange={(e) => setForm({ ...form, email: e.target.value })}
                             className="w-full px-4 py-2 rounded-lg border dark:bg-gray-700 dark:text-white text-sm"
                         />
-                        <div className="relative">
-                            <input
-                                type={showPassword ? "text" : "password"}
-                                placeholder="Password" value={form.password}
-                                onChange={(e) => setForm({ ...form, password: e.target.value })}
-                                className="w-full px-4 py-2 pr-10 rounded-lg border dark:bg-gray-700 dark:text-white text-sm"
-                            />
-                            <button type="button" onClick={() => setShowPassword((p) => !p)}
-                                className="absolute inset-y-0 right-3 flex items-center text-gray-400">
-                                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                            </button>
-                        </div>
-                        {form.password && <PasswordRules checks={checks} />}
 
                         {/* Role */}
                         <div>
@@ -174,7 +162,7 @@ function AddUserModal({ onClose, onAdded }) {
                             </button>
                             <button type="submit" disabled={loading}
                                 className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-sm disabled:opacity-50">
-                                {loading ? "Adding..." : "Add User"}
+                                {loading ? "Adding..." : `Add ${roleLabel}`}
                             </button>
                         </div>
                     </form>
@@ -183,9 +171,9 @@ function AddUserModal({ onClose, onAdded }) {
 
             {showConfirm && (
                 <ConfirmModal
-                    title="Add User"
-                    message={`Add ${form.name} (${form.email}) as ${form.role}?`}
-                    confirmLabel="Add User"
+                    title={`Add ${roleLabel}`}
+                    message={`Add ${form.name} (${form.email}) as ${form.role === "admin" ? "an admin" : "a user"}?`}
+                    confirmLabel={`Add ${roleLabel}`}
                     onConfirm={handleConfirm}
                     onClose={() => setShowConfirm(false)}
                 />
@@ -540,14 +528,20 @@ function ErrorList({ errors }) {
 
 export default function Admin() {
     const navigate = useNavigate();
-    const [activeTab, setActiveTab] = useState("users");
+    const currentUser = (() => {
+        try { return JSON.parse(localStorage.getItem("user")); } catch { return null; }
+    })();
+    const isSuperAdmin = currentUser?.role === "superadmin";
+    const [activeTab, setActiveTab] = useState(isSuperAdmin ? "users" : "refdata");
 
     // ── Users ────────────────────────────────────────────────────────────
     const [users, setUsers] = useState([]);
     const [usersLoading, setUsersLoading] = useState(true);
     const [showAddUser, setShowAddUser] = useState(false);
     const [roleConfirm, setRoleConfirm] = useState(null); // { user, newRole }
-    const [resetConfirm, setResetConfirm] = useState(null); // user
+    const [deleteConfirm, setDeleteConfirm] = useState(null); // user
+    const [approveConfirm, setApproveConfirm] = useState(null); // user
+    const [revokeConfirm, setRevokeConfirm] = useState(null); // user
 
     // ── Reference data ───────────────────────────────────────────────────
     const [genres, setGenres] = useState([]);
@@ -559,7 +553,7 @@ export default function Admin() {
     useEffect(() => {
         try {
             const user = JSON.parse(localStorage.getItem("user"));
-            if (user?.role !== "admin") navigate("/dashboard", { replace: true });
+            if (user?.role !== "admin" && user?.role !== "superadmin") navigate("/dashboard", { replace: true });
         } catch {
             navigate("/dashboard", { replace: true });
         }
@@ -594,7 +588,7 @@ export default function Admin() {
     }, []);
 
     useEffect(() => {
-        loadUsers();
+        if (isSuperAdmin) loadUsers();
         loadRefData();
     }, []);
 
@@ -608,19 +602,41 @@ export default function Admin() {
     const confirmChangeRole = async () => {
         try {
             await changeUserRole(roleConfirm.user._id, roleConfirm.newRole);
-            toast.success(`${roleConfirm.user.name} is now ${roleConfirm.newRole}`);
+            const article = roleConfirm.newRole === "admin" ? "an" : "a";
+            toast.success(`${roleConfirm.user.name} is now ${article} ${roleConfirm.newRole}.`);
             loadUsers();
         } catch (err) {
             toast.error(err.message || "Failed to change role");
         }
     };
 
-    const confirmSendResetOTP = async () => {
+    const confirmDeleteUser = async () => {
         try {
-            await sendUserResetOTP(resetConfirm._id);
-            toast.success(`Reset OTP sent to ${resetConfirm.email}`);
+            await deleteAdminUser(deleteConfirm._id);
+            toast.success(`${deleteConfirm.name} has been removed`);
+            loadUsers();
         } catch (err) {
-            toast.error(err.message || "Failed to send OTP");
+            toast.error(err.message || "Failed to delete user");
+        }
+    };
+
+    const confirmApproveReset = async () => {
+        try {
+            await approvePasswordReset(approveConfirm._id);
+            toast.success(`Password reset approved for ${approveConfirm.name}`);
+            loadUsers();
+        } catch (err) {
+            toast.error(err.message || "Failed to approve reset");
+        }
+    };
+
+    const confirmRevokeReset = async () => {
+        try {
+            await revokePasswordReset(revokeConfirm._id);
+            toast.success(`Reset approval revoked for ${revokeConfirm.name}`);
+            loadUsers();
+        } catch (err) {
+            toast.error(err.message || "Failed to revoke reset");
         }
     };
 
@@ -656,16 +672,11 @@ export default function Admin() {
         }
     };
 
-    const currentUser = (() => {
-        try { return JSON.parse(localStorage.getItem("user")); } catch { return null; }
-    })();
-
     // ─── Tabs ─────────────────────────────────────────────────────────────────
 
     const tabs = [
-        { id: "users", label: "Users" },
+        ...(isSuperAdmin ? [{ id: "users", label: "Users" }] : []),
         { id: "refdata", label: "Reference Data" },
-        { id: "reset", label: "Password Reset" },
         { id: "csv", label: "Bulk Import" },
     ];
 
@@ -725,6 +736,8 @@ export default function Admin() {
                                     <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                                         {users.map((user) => {
                                             const isSelf = currentUser?.id === user._id?.toString();
+                                            const isSuperAdminUser = user.role === "superadmin";
+                                            const hasPendingReset = user.passwordResetApproved === true;
                                             return (
                                                 <tr key={user._id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                                                     <td className="px-6 py-4 text-gray-800 dark:text-gray-100 font-medium">
@@ -733,23 +746,62 @@ export default function Admin() {
                                                     </td>
                                                     <td className="px-6 py-4 text-gray-600 dark:text-gray-300">{user.email}</td>
                                                     <td className="px-6 py-4">
-                                                        <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${user.role === "admin"
-                                                            ? "bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300"
-                                                            : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
+                                                        <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${isSuperAdminUser
+                                                                ? "bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300"
+                                                                : user.role === "admin"
+                                                                    ? "bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300"
+                                                                    : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
                                                             }`}>
                                                             {user.role}
                                                         </span>
                                                     </td>
                                                     <td className="px-6 py-4 text-gray-500 dark:text-gray-400">{formatDate(user.createdAt)}</td>
-                                                    <td className="px-6 py-4 text-right">
-                                                        <button
-                                                            disabled={isSelf}
-                                                            onClick={() => handleChangeRole(user)}
-                                                            title={isSelf ? "You cannot change your own role" : `Make ${user.role === "admin" ? "user" : "admin"}`}
-                                                            className="px-3 py-1 text-xs bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 disabled:opacity-30 disabled:cursor-not-allowed"
-                                                        >
-                                                            Make {user.role === "admin" ? "User" : "Admin"}
-                                                        </button>
+                                                    <td className="px-6 py-4">
+                                                        {isSuperAdminUser ? (
+                                                            <span className="text-xs text-gray-400 dark:text-gray-500 italic w-full text-center block">Protected</span>
+                                                        ) : (
+                                                            <div className="flex items-center justify-end gap-2 flex-wrap">
+                                                                {/* Role toggle */}
+                                                                <button
+                                                                    disabled={isSelf}
+                                                                    onClick={() => handleChangeRole(user)}
+                                                                    title={isSelf ? "You cannot change your own role" : `Make ${user.role === "admin" ? "User" : "Admin"}`}
+                                                                    className="w-24 px-3 py-1 text-xs bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 disabled:opacity-30 disabled:cursor-not-allowed text-center"
+                                                                >
+                                                                    {`Make ${user.role === "admin" ? "User" : "Admin"}`}
+                                                                </button>
+
+                                                                {/* Password reset approve/revoke */}
+                                                                {hasPendingReset ? (
+                                                                    <button
+                                                                        onClick={() => setRevokeConfirm(user)}
+                                                                        className="px-3 py-1 text-xs bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 rounded-lg hover:bg-amber-200 dark:hover:bg-amber-800"
+                                                                        title="Revoke password reset approval"
+                                                                    >
+                                                                        Revoke Reset
+                                                                    </button>
+                                                                ) : (
+                                                                    <button
+                                                                        disabled={isSelf}
+                                                                        onClick={() => setApproveConfirm(user)}
+                                                                        title={isSelf ? "Use forgot password to reset your own" : "Approve password reset"}
+                                                                        className="px-3 py-1 text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-800 disabled:opacity-30 disabled:cursor-not-allowed"
+                                                                    >
+                                                                        Approve Reset
+                                                                    </button>
+                                                                )}
+
+                                                                {/* Delete user */}
+                                                                <button
+                                                                    disabled={isSelf}
+                                                                    onClick={() => setDeleteConfirm(user)}
+                                                                    title={isSelf ? "You cannot delete your own account" : "Remove user"}
+                                                                    className="px-3 py-1 text-xs bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-lg hover:bg-red-200 dark:hover:bg-red-800 disabled:opacity-30 disabled:cursor-not-allowed"
+                                                                >
+                                                                    Remove
+                                                                </button>
+                                                            </div>
+                                                        )}
                                                     </td>
                                                 </tr>
                                             );
@@ -761,8 +813,10 @@ export default function Admin() {
                                 <div className="md:hidden divide-y divide-gray-100 dark:divide-gray-700">
                                     {users.map((user) => {
                                         const isSelf = currentUser?.id === user._id?.toString();
+                                        const isSuperAdminUser = user.role === "superadmin";
+                                        const hasPendingReset = user.passwordResetApproved === true;
                                         return (
-                                            <div key={user._id} className="p-4 space-y-2">
+                                            <div key={user._id} className="p-4 space-y-3">
                                                 <div className="flex items-start justify-between">
                                                     <div>
                                                         <p className="font-medium text-gray-800 dark:text-gray-100">
@@ -770,24 +824,51 @@ export default function Admin() {
                                                             {isSelf && <span className="ml-2 text-xs text-blue-500">(you)</span>}
                                                         </p>
                                                         <p className="text-sm text-gray-500 dark:text-gray-400">{user.email}</p>
+                                                        <p className="text-xs text-gray-400 mt-0.5">{formatDate(user.createdAt)}</p>
                                                     </div>
-                                                    <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${user.role === "admin"
-                                                        ? "bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300"
-                                                        : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
+                                                    <span className={`px-2.5 py-1 rounded-full text-xs font-medium shrink-0 ${isSuperAdminUser
+                                                            ? "bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300"
+                                                            : user.role === "admin"
+                                                                ? "bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300"
+                                                                : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
                                                         }`}>
                                                         {user.role}
                                                     </span>
                                                 </div>
-                                                <div className="flex items-center justify-between">
-                                                    <span className="text-xs text-gray-400">{formatDate(user.createdAt)}</span>
-                                                    <button
-                                                        disabled={isSelf}
-                                                        onClick={() => handleChangeRole(user)}
-                                                        className="px-3 py-1 text-xs bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 rounded-lg disabled:opacity-30 disabled:cursor-not-allowed"
-                                                    >
-                                                        Make {user.role === "admin" ? "User" : "Admin"}
-                                                    </button>
-                                                </div>
+                                                {!isSuperAdminUser && (
+                                                    <div className="flex flex-wrap gap-2">
+                                                        <button
+                                                            disabled={isSelf}
+                                                            onClick={() => handleChangeRole(user)}
+                                                            className="px-3 py-1 text-xs bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 rounded-lg disabled:opacity-30 disabled:cursor-not-allowed"
+                                                        >
+                                                            {`Make ${user.role === "admin" ? "User" : "Admin"}`}
+                                                        </button>
+                                                        {hasPendingReset ? (
+                                                            <button
+                                                                onClick={() => setRevokeConfirm(user)}
+                                                                className="px-3 py-1 text-xs bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 rounded-lg"
+                                                            >
+                                                                Revoke Reset
+                                                            </button>
+                                                        ) : (
+                                                            <button
+                                                                disabled={isSelf}
+                                                                onClick={() => setApproveConfirm(user)}
+                                                                className="px-3 py-1 text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-lg disabled:opacity-30 disabled:cursor-not-allowed"
+                                                            >
+                                                                Approve Reset
+                                                            </button>
+                                                        )}
+                                                        <button
+                                                            disabled={isSelf}
+                                                            onClick={() => setDeleteConfirm(user)}
+                                                            className="px-3 py-1 text-xs bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-lg disabled:opacity-30 disabled:cursor-not-allowed"
+                                                        >
+                                                            Remove
+                                                        </button>
+                                                    </div>
+                                                )}
                                             </div>
                                         );
                                     })}
@@ -831,82 +912,6 @@ export default function Admin() {
                 </div>
             )}
 
-            {/* ── Password Reset tab ────────────────────────────────────────────── */}
-            {activeTab === "reset" && (
-                <div className="space-y-4">
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
-                        Send a password reset OTP to any user's registered email. The OTP is valid for 24 hours.
-                    </p>
-
-                    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg overflow-hidden">
-                        {usersLoading ? (
-                            <div className="p-6 space-y-3">
-                                {[...Array(3)].map((_, i) => (
-                                    <div key={i} className="h-10 rounded-lg bg-gray-100 dark:bg-gray-700 animate-pulse" />
-                                ))}
-                            </div>
-                        ) : (
-                            <>
-                                {/* Desktop */}
-                                <table className="hidden md:table w-full text-left text-sm">
-                                    <thead className="bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-400">
-                                        <tr>
-                                            <th className="px-6 py-3 font-medium">Name</th>
-                                            <th className="px-6 py-3 font-medium">Email</th>
-                                            <th className="px-6 py-3 font-medium text-right">Action</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                                        {users.map((user) => {
-                                            const isSelf = currentUser?.id === user._id?.toString();
-                                            return (
-                                                <tr key={user._id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                                                    <td className="px-6 py-4 text-gray-800 dark:text-gray-100 font-medium">{user.name}</td>
-                                                    <td className="px-6 py-4 text-gray-600 dark:text-gray-300">{user.email}</td>
-                                                    <td className="px-6 py-4 text-right">
-                                                        <button
-                                                            disabled={isSelf}
-                                                            onClick={() => setResetConfirm(user)}
-                                                            title={isSelf ? "Use the forgot password flow to reset your own password" : undefined}
-                                                            className="px-3 py-1 text-xs bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-30 disabled:cursor-not-allowed"
-                                                        >
-                                                            Send Reset OTP
-                                                        </button>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
-
-                                {/* Mobile */}
-                                <div className="md:hidden divide-y divide-gray-100 dark:divide-gray-700">
-                                    {users.map((user) => {
-                                        const isSelf = currentUser?.id === user._id?.toString();
-                                        return (
-                                            <div key={user._id} className="p-4 flex items-center justify-between gap-3">
-                                                <div className="min-w-0">
-                                                    <p className="font-medium text-gray-800 dark:text-gray-100 truncate">{user.name}</p>
-                                                    <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{user.email}</p>
-                                                </div>
-                                                <button
-                                                    disabled={isSelf}
-                                                    onClick={() => setResetConfirm(user)}
-                                                    className="shrink-0 px-3 py-1 text-xs bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-30 disabled:cursor-not-allowed"
-                                                >
-                                                    Send OTP
-                                                </button>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </>
-                        )}
-                    </div>
-                </div>
-            )}
-
-
             {/* ── Bulk Import tab ───────────────────────────────────────────────── */}
             {activeTab === "csv" && (
                 <CSVImportTab />
@@ -931,14 +936,36 @@ export default function Admin() {
                 />
             )}
 
-            {resetConfirm && (
+            {deleteConfirm && (
                 <ConfirmModal
-                    title="Send Reset OTP"
-                    message={`Send a 24-hour password reset OTP to ${resetConfirm.name} at ${resetConfirm.email}?`}
-                    confirmLabel="Send OTP"
+                    title="Remove User"
+                    message={`Remove ${deleteConfirm.name} (${deleteConfirm.email})? Their books will be kept but all their reading data, statuses and public sharing will be removed. This cannot be undone.`}
+                    confirmLabel="Remove User"
+                    confirmClass="bg-red-600 hover:bg-red-700"
+                    onConfirm={confirmDeleteUser}
+                    onClose={() => setDeleteConfirm(null)}
+                />
+            )}
+
+            {approveConfirm && (
+                <ConfirmModal
+                    title="Approve Password Reset"
+                    message={`Allow ${approveConfirm.name} to reset their password? They can set a new password from the login page. You can revoke this at any time.`}
+                    confirmLabel="Approve Reset"
+                    confirmClass="bg-blue-600 hover:bg-blue-700"
+                    onConfirm={confirmApproveReset}
+                    onClose={() => setApproveConfirm(null)}
+                />
+            )}
+
+            {revokeConfirm && (
+                <ConfirmModal
+                    title="Revoke Reset Approval"
+                    message={`Revoke the password reset approval for ${revokeConfirm.name}? They will no longer be able to reset their password until you approve again.`}
+                    confirmLabel="Revoke"
                     confirmClass="bg-amber-500 hover:bg-amber-600"
-                    onConfirm={confirmSendResetOTP}
-                    onClose={() => setResetConfirm(null)}
+                    onConfirm={confirmRevokeReset}
+                    onClose={() => setRevokeConfirm(null)}
                 />
             )}
         </div>

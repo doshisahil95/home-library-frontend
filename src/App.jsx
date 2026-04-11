@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { Toaster } from "react-hot-toast";
+import { Toaster, toast } from "react-hot-toast";
 
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
@@ -16,10 +16,22 @@ function App() {
       <Toaster
         position="top-right"
         toastOptions={{
-          duration: 3000,
+          duration: 4000,
           style: { background: "#333", color: "#fff" },
         }}
-      />
+      >
+        {(t) => (
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <span>{t.message}</span>
+            <button
+              onClick={() => toast.dismiss(t.id)}
+              style={{ background: "none", border: "none", color: "#fff", cursor: "pointer", fontSize: "16px", lineHeight: 1, opacity: 0.7, padding: "0 2px" }}
+            >
+              ×
+            </button>
+          </div>
+        )}
+      </Toaster>
 
       <Routes>
         {/* Public */}

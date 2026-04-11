@@ -33,6 +33,31 @@ function PillSkeleton({ count = 4 }) {
     );
 }
 
+// ─── Inline public link for BookModal ────────────────────────────────────────
+
+function ModalPublicLink({ userId }) {
+    const [copied, setCopied] = useState(false);
+    const url = `${window.location.origin}/public/${userId}`;
+    const handleCopy = () => {
+        navigator.clipboard.writeText(url).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        });
+    };
+    return (
+        <div className="border-t border-gray-200 dark:border-gray-600 px-3 py-2 flex items-center gap-2">
+            <input
+                readOnly value={url}
+                className="flex-1 text-xs text-gray-500 dark:text-gray-400 bg-transparent truncate outline-none"
+            />
+            <button type="button" onClick={handleCopy}
+                className="shrink-0 text-xs text-blue-600 dark:text-blue-400 hover:underline whitespace-nowrap">
+                {copied ? "Copied!" : "Copy link"}
+            </button>
+        </div>
+    );
+}
+
 export default function BookModal({
     isEditing,
     formData,
@@ -41,6 +66,7 @@ export default function BookModal({
     onSubmit,
     onClose,
     currentStatus,
+    userId,
 }) {
     const [houses, setHouses] = useState([]);
     const [genres, setGenres] = useState([]);
@@ -277,9 +303,9 @@ export default function BookModal({
                         )}
                     </div>
 
-                    {/* Make Public toggle — only shown when a status is set */}
-                    {formData.userStatus && (
-                        <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600">
+                    {/* Make Public toggle — always available, independent of reading status */}
+                    <div className="rounded-lg bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 overflow-hidden">
+                        <div className="flex items-center justify-between py-2 px-3">
                             <div>
                                 <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Show on public page</p>
                                 <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Anyone with your public link can see this book</p>
@@ -292,7 +318,10 @@ export default function BookModal({
                                 <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${formData.isPublic ? "translate-x-6" : "translate-x-1"}`} />
                             </button>
                         </div>
-                    )}
+                        {formData.isPublic && userId && (
+                            <ModalPublicLink userId={userId} />
+                        )}
+                    </div>
 
                     {/* Reading dates */}
                     {(formData.userStatus === "reading" || formData.userStatus === "read") && (

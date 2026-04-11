@@ -80,7 +80,7 @@ export function searchBooks(query, filters = {}, limit, cursor, signal) {
     const params = new URLSearchParams({ limit });
     if (query) params.append("q", query);
     appendFilters(params, filters);
-    if (cursor) params.append("searchAfter", JSON.stringify(cursor));
+    if (cursor) params.append("searchAfter", cursor);
     return request(`/searchBooks?${params}`, { signal });
 }
 
@@ -111,6 +111,21 @@ export function updateTheme(theme) {
     });
 }
 
+export function updateProfile(fields) {
+    return request("/users/profile", {
+        method: "PATCH",
+        body: JSON.stringify(fields),
+    });
+}
+
+export function makeAllPrivate() {
+    return request("/users/make-all-private", { method: "POST" });
+}
+
+export function getPublicCount() {
+    return request("/users/public-count");
+}
+
 export function getDiscoverData() {
     return request("/discover");
 }
@@ -137,8 +152,16 @@ export function changeUserRole(id, role) {
     return request(`/admin/users/${id}/role`, { method: "PATCH", body: JSON.stringify({ role }) });
 }
 
-export function sendUserResetOTP(id) {
-    return request(`/admin/users/${id}/reset-otp`, { method: "POST" });
+export function deleteAdminUser(id) {
+    return request(`/admin/users/${id}`, { method: "DELETE" });
+}
+
+export function approvePasswordReset(id) {
+    return request(`/admin/users/${id}/approve-reset`, { method: "POST" });
+}
+
+export function revokePasswordReset(id) {
+    return request(`/admin/users/${id}/revoke-reset`, { method: "POST" });
 }
 
 export function createReferenceItem(type, name) {

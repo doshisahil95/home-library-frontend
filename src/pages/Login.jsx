@@ -41,6 +41,7 @@ export default function Login() {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
+  const [resetMethod, setResetMethod] = useState("otp"); // "otp" | "approved"
   const [resendTimer, setResendTimer] = useState(0);
   const [resendAttempts, setResendAttempts] = useState(0);
   const timerRef = useRef(null);
@@ -70,7 +71,9 @@ export default function Login() {
   const strengthScore = Object.values(passwordChecks).filter(Boolean).length;
   const passwordsMatch = confirmPassword.length > 0 && confirmPassword === newPassword;
   const isStrongPassword = strengthScore === 4 && passwordsMatch;
-  const canResetPassword = otp.trim().length > 0 && isStrongPassword && !resetLoading;
+
+  // OTP flow requires 6 digits; approved and first_login flows only need strong password
+  const canResetPassword = (resetMethod === "otp" ? otp.length === 6 : true) && isStrongPassword && !resetLoading;
 
   const getStrengthColor = () => {
     if (!newPassword) return "bg-gray-300 dark:bg-gray-500";
@@ -84,8 +87,6 @@ export default function Login() {
   // ========================
   // OTP COUNTDOWN TIMER
   // ========================
-  // Uses setInterval rather than a cascading setTimeout chain — fires once
-  // per second cleanly and clears itself when the countdown reaches zero
   const startResendTimer = () => {
     if (timerRef.current) clearInterval(timerRef.current);
 
@@ -103,7 +104,6 @@ export default function Login() {
     }, 1000);
   };
 
-  // Clean up interval on unmount
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
@@ -120,9 +120,8 @@ export default function Login() {
 
     try {
       setResendLoading(true);
-
+      clearMessages(); // clear both error and message before resend
       await sendResetOTP({ email });
-
       setMessage("OTP resent.");
       setResendAttempts((prev) => prev + 1);
       startResendTimer();
@@ -152,13 +151,8 @@ export default function Login() {
 
     try {
       setLoginLoading(true);
-
       const data = await loginUser({ email, password });
-
-      // Token is now an HttpOnly cookie set by the server — not accessible here.
-      // Only store non-sensitive user info for UI purposes (name, theme, etc.)
       localStorage.setItem("user", JSON.stringify(data.user));
-
       navigate("/dashboard");
     } catch (err) {
       setError(err.message || "Login failed");
@@ -168,7 +162,7 @@ export default function Login() {
   };
 
   // ========================
-  // REQUEST OTP
+  // REQUEST RESET
   // ========================
   const handleSendOTP = async () => {
     clearMessages();
@@ -180,13 +174,24 @@ export default function Login() {
 
     try {
       setLoginLoading(true);
+      const data = await sendResetOTP({ email });
 
-      await sendResetOTP({ email });
-
-      setMessage("OTP sent to your email.");
-      setMode("reset");
-      setResendAttempts(1);
-      startResendTimer();
+      if (data.method === "otp") {
+        setResetMethod("otp");
+        setMessage("OTP sent to your email.");
+        setMode("reset");
+        setResendAttempts(1);
+        startResendTimer();
+      } else if (data.method === "approved") {
+        setResetMethod("approved");
+        setMode("reset");
+      } else if (data.method === "first_login") {
+        setResetMethod("first_login");
+        setMode("reset");
+      } else {
+        // contact_admin
+        setMode("contactAdmin");
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -200,7 +205,12 @@ export default function Login() {
   const handleResetPassword = async () => {
     clearMessages();
 
-    if (!otp || !newPassword || !confirmPassword) {
+    if (resetMethod === "otp" && !otp) {
+      setError("Please enter your OTP.");
+      return;
+    }
+
+    if (!newPassword || !confirmPassword) {
       setError("All fields required.");
       return;
     }
@@ -212,9 +222,8 @@ export default function Login() {
 
     try {
       setResetLoading(true);
-
-      await apiResetPassword({ email, otp, newPassword });
-
+      // OTP flow sends otp; approved/first_login flows send no OTP
+      await apiResetPassword({ email, otp: resetMethod === "otp" ? otp : undefined, newPassword });
       toast.success("Password reset successful. Please log in.");
       setOtp("");
       setNewPassword("");
@@ -279,13 +288,41 @@ export default function Login() {
               {loginLoading ? "Logging in..." : "Login"}
             </button>
 
-            <div
-              className="text-center text-sm text-blue-600 dark:text-blue-400 cursor-pointer hover:underline"
-              onClick={() => switchMode("requestOTP")}
-            >
-              Forgot Password?
+            <div className="flex justify-between text-sm">
+              <div
+                className="text-blue-600 dark:text-blue-400 cursor-pointer hover:underline"
+                onClick={() => switchMode("requestOTP")}
+              >
+                Forgot Password?
+              </div>
+              <div
+                className="text-blue-600 dark:text-blue-400 cursor-pointer hover:underline"
+                onClick={() => switchMode("requestOTP")}
+              >
+                First time logging in?
+              </div>
             </div>
           </form>
+        )}
+
+        {/* ---- CONTACT ADMIN ---- */}
+        {mode === "contactAdmin" && (
+          <div className="space-y-4">
+            <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg text-center">
+              <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                Password reset not available
+              </p>
+              <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+                Please contact your admin to request a password reset.
+              </p>
+            </div>
+            <div
+              className="text-center text-sm cursor-pointer text-blue-600 dark:text-blue-400 hover:underline"
+              onClick={() => switchMode("login")}
+            >
+              Back to Login
+            </div>
+          </div>
         )}
 
         {/* ---- REQUEST OTP ---- */}
@@ -304,7 +341,7 @@ export default function Login() {
               disabled={loginLoading}
               className="w-full bg-blue-600 text-white py-2 rounded-lg disabled:opacity-60"
             >
-              {loginLoading ? "Sending..." : "Send OTP"}
+              {loginLoading ? "Checking..." : "Proceed with Password Reset"}
             </button>
 
             <div
@@ -319,13 +356,40 @@ export default function Login() {
         {/* ---- RESET PASSWORD ---- */}
         {mode === "reset" && (
           <div className="space-y-4">
-            <input
-              type="text"
-              placeholder="Enter OTP"
-              value={otp}
-              onChange={(e) => setOtp(e.target.value)}
-              className="w-full px-4 py-2 rounded-lg border dark:bg-gray-700 dark:text-white"
-            />
+
+            {/* First login — show welcome message */}
+            {resetMethod === "first_login" && (
+              <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg text-center">
+                <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                  Welcome! Please set your password to get started.
+                </p>
+              </div>
+            )}
+
+            {/* OTP input — only for superadmin OTP flow */}
+            {resetMethod === "otp" && (
+              <div>
+                <label className="block mb-1.5 text-sm font-medium text-gray-700 dark:text-gray-300">
+                  One-Time Password
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  placeholder="••••••"
+                  value={otp}
+                  maxLength={6}
+                  onChange={(e) => {
+                    const digits = e.target.value.replace(/[^0-9]/g, "").slice(0, 6);
+                    setOtp(digits);
+                  }}
+                  className="w-full px-4 py-2 rounded-lg border dark:bg-gray-700 dark:text-white tracking-widest text-center font-mono text-lg"
+                />
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1 text-center">
+                  {otp.length}/6 digits
+                </p>
+              </div>
+            )}
 
             {/* New Password */}
             <div className="relative">
@@ -380,20 +444,22 @@ export default function Login() {
               <RuleItem valid={passwordsMatch} text="Passwords match" />
             </div>
 
-            {/* Resend OTP + back to login */}
+            {/* Resend OTP — only for OTP flow */}
             <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
               <div>
-                {resendAttempts >= 3 ? (
-                  "Maximum resend attempts reached."
-                ) : canResend ? (
-                  <span
-                    onClick={handleResendOTP}
-                    className="cursor-pointer text-blue-600 dark:text-blue-400 hover:underline"
-                  >
-                    {resendLoading ? "Resending..." : `Resend OTP (${3 - resendAttempts} left)`}
-                  </span>
-                ) : (
-                  `Resend in ${resendTimer}s · ${3 - resendAttempts} left`
+                {resetMethod === "otp" && (
+                  resendAttempts >= 3 ? (
+                    "Maximum resend attempts reached."
+                  ) : canResend ? (
+                    <span
+                      onClick={handleResendOTP}
+                      className="cursor-pointer text-blue-600 dark:text-blue-400 hover:underline"
+                    >
+                      {resendLoading ? "Resending..." : `Resend OTP (${3 - resendAttempts} left)`}
+                    </span>
+                  ) : (
+                    `Resend in ${resendTimer}s · ${3 - resendAttempts} left`
+                  )
                 )}
               </div>
               <span
@@ -408,11 +474,11 @@ export default function Login() {
               onClick={handleResetPassword}
               disabled={!canResetPassword}
               className={`w-full py-2 rounded-lg text-white ${canResetPassword
-                  ? "bg-green-600 hover:bg-green-700"
-                  : "bg-gray-400 cursor-not-allowed"
+                ? "bg-green-600 hover:bg-green-700"
+                : "bg-gray-400 cursor-not-allowed"
                 }`}
             >
-              {resetLoading ? "Resetting..." : "Reset Password"}
+              {resetLoading ? "Setting..." : resetMethod === "first_login" ? "Set Password" : "Reset Password"}
             </button>
           </div>
         )}

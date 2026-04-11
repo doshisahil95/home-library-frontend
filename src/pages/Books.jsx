@@ -17,7 +17,7 @@ import {
 
 const EMPTY_FORM = {
   title: "", author: "", house: "", genre: [], language: "", locationInHouse: "",
-  description: "", userStatus: null, startedAt: null, startedAtLocked: false,
+  description: "", userStatus: null, isPublic: false, startedAt: null, startedAtLocked: false,
   finishedAt: null, finishedAtLocked: false, rating: null,
 };
 
@@ -27,17 +27,26 @@ function SortIcon({ field, sortBy, sortOrder, disabled }) {
 }
 
 function buildPageNumbers(currentPage, totalPages) {
-  if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
-  const pages = [];
-  const delta = 2;
-  const left = currentPage - delta;
-  const right = currentPage + delta;
-  pages.push(1);
-  if (left > 2) pages.push("...");
-  for (let i = Math.max(2, left); i <= Math.min(totalPages - 1, right); i++) pages.push(i);
-  if (right < totalPages - 1) pages.push("...");
-  pages.push(totalPages);
-  return pages;
+  // Always returns exactly 7 slots so the bar never resizes.
+  if (totalPages <= 7) {
+    return Array.from({ length: totalPages }, (_, i) => i + 1);
+  }
+  const slots = [null, null, null, null, null, null, null];
+  slots[0] = 1;
+  slots[6] = totalPages;
+  if (currentPage <= 3) {
+    // Near start: 1 2 3 4 5 ... last
+    slots[1] = 2; slots[2] = 3; slots[3] = 4; slots[4] = 5; slots[5] = "...";
+  } else if (currentPage >= totalPages - 2) {
+    // Near end: 1 ... last-4 last-3 last-2 last-1 last
+    slots[1] = "..."; slots[2] = totalPages - 4; slots[3] = totalPages - 3;
+    slots[4] = totalPages - 2; slots[5] = totalPages - 1;
+  } else {
+    // Middle: 1 ... p-1 p p+1 ... last
+    slots[1] = "..."; slots[2] = currentPage - 1; slots[3] = currentPage;
+    slots[4] = currentPage + 1; slots[5] = "...";
+  }
+  return slots;
 }
 
 function formatDate(dateStr) {
@@ -251,7 +260,10 @@ export default function Books() {
     if (initialLoad.current) return;
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
     debounceTimer.current = setTimeout(() => {
-      const filters = { house: filterHouse, genres: filterGenres, language: filterLanguage, status: filterStatus };
+      // Clear no-status filter if switching to search mode — incompatible combination
+      const effectiveStatus = (search.trim() && filterStatus === "no-status") ? "" : filterStatus;
+      if (effectiveStatus !== filterStatus) setFilterStatus("");
+      const filters = { house: filterHouse, genres: filterGenres, language: filterLanguage, status: effectiveStatus };
       setSearchCursor(null);
       setSearchPrevCursors([]);
       setExpandedId(null);
@@ -341,6 +353,7 @@ export default function Books() {
       locationInHouse: book.locationInHouse || "",
       description: book.description || "",
       userStatus: book.userStatus || null,
+      isPublic: book.isPublic || false,
       startedAt: book.startedAt || null,
       startedAtLocked: book.startedAtLocked || false,
       finishedAt: book.finishedAt || null,
@@ -395,10 +408,37 @@ export default function Books() {
 
   const skeletonRows = Math.min(limit, 25);
 
+  // Current user ID for building public link in expanded row
+  const currentUserId = (() => {
+    try { return JSON.parse(localStorage.getItem("user"))?.id || ""; } catch { return ""; }
+  })();
+
+  // ─── Inline public link ───────────────────────────────────────────────────
+  function InlinePublicLink({ userId }) {
+    const [copied, setCopied] = useState(false);
+    const url = userId ? `${window.location.origin}/public/${userId}` : "";
+    const handleCopy = () => {
+      if (!url) return;
+      navigator.clipboard.writeText(url).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      });
+    };
+    return (
+      <div className="flex items-center gap-1.5">
+        <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 font-medium">Visible on public page</span>
+        <button onClick={handleCopy}
+          className="text-xs text-blue-600 dark:text-blue-400 hover:underline">
+          {copied ? "Copied!" : "Copy link"}
+        </button>
+      </div>
+    );
+  }
+
   // ─── Expanded row detail ──────────────────────────────────────────────────
   // Shared between desktop and mobile to avoid duplication.
 
-  function ExpandedDetail({ book }) {
+  function ExpandedDetail({ book, userId }) {
     return (
       <div className="space-y-3">
         {book.genre?.length > 0 && (
@@ -411,19 +451,28 @@ export default function Books() {
             ))}
           </div>
         )}
-        <div className="flex flex-wrap gap-4">
-          {book.language && (
-            <div>
-              <span className="text-xs font-semibold text-gray-400 dark:text-gray-500">Language: </span>
-              <span className="text-xs text-gray-600 dark:text-gray-300">{book.language}</span>
-            </div>
-          )}
-          {book.locationInHouse && (
-            <div>
-              <span className="text-xs font-semibold text-gray-400 dark:text-gray-500">Location: </span>
-              <span className="text-xs text-gray-600 dark:text-gray-300">{book.locationInHouse}</span>
-            </div>
-          )}
+        <div className="space-y-1.5">
+          <div>
+            <span className="text-xs font-semibold text-gray-400 dark:text-gray-500">Language: </span>
+            {book.language
+              ? <span className="text-xs text-gray-600 dark:text-gray-300">{book.language}</span>
+              : <span className="text-xs text-gray-400 dark:text-gray-500 italic">No language set.</span>
+            }
+          </div>
+          <div>
+            <span className="text-xs font-semibold text-gray-400 dark:text-gray-500">Location in House: </span>
+            {book.locationInHouse
+              ? <span className="text-xs text-gray-600 dark:text-gray-300">{book.locationInHouse}</span>
+              : <span className="text-xs text-gray-400 dark:text-gray-500 italic">No location added yet.</span>
+            }
+          </div>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-xs font-semibold text-gray-400 dark:text-gray-500">Public Sharing: </span>
+            {book.isPublic
+              ? <InlinePublicLink userId={userId} />
+              : <span className="text-xs text-gray-400 dark:text-gray-500 italic">Not shared publicly</span>
+            }
+          </div>
         </div>
         <div>
           <span className="text-xs font-semibold text-gray-400 dark:text-gray-500">Description:</span>
@@ -587,17 +636,20 @@ export default function Books() {
           <div className="space-y-2">
             <span className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Status</span>
             <div className="flex flex-wrap gap-1.5">
-              {FILTER_STATUSES.map((s) => (
-                <button key={s} type="button"
-                  onClick={() => setFilterStatus((prev) => prev === s ? "" : s)}
-                  className={`px-2.5 py-1 rounded-full text-xs transition ${filterStatus === s
-                    ? `${STATUS_STYLES[s]} ring-1 ring-current`
-                    : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
-                    }`}
-                >
-                  {STATUS_LABELS[s]}
-                </button>
-              ))}
+              {FILTER_STATUSES
+                // "No Status" cannot be combined with Atlas Search — hide it when search is active
+                .filter((s) => !(isAtlasSearch && s === "no-status"))
+                .map((s) => (
+                  <button key={s} type="button"
+                    onClick={() => setFilterStatus((prev) => prev === s ? "" : s)}
+                    className={`px-2.5 py-1 rounded-full text-xs transition ${filterStatus === s
+                      ? `${STATUS_STYLES[s]} ring-1 ring-current`
+                      : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+                      }`}
+                  >
+                    {STATUS_LABELS[s]}
+                  </button>
+                ))}
             </div>
           </div>
         </div>
@@ -682,7 +734,7 @@ export default function Books() {
                   </div>
                   {isExpanded && (
                     <div className="border-t border-gray-100 dark:border-gray-700 px-4 py-3 space-y-3 bg-gray-50 dark:bg-gray-700/50">
-                      <ExpandedDetail book={book} />
+                      <ExpandedDetail book={book} userId={currentUserId} />
                       <div className="flex gap-2 pt-1">
                         <button onClick={(e) => { e.stopPropagation(); openEditModal(book); }}
                           className="flex-1 px-3 py-2 text-xs bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 text-center">
@@ -795,7 +847,7 @@ export default function Books() {
                     {isExpanded && (
                       <tr key={`${book._id}-expanded`} className="bg-gray-50 dark:bg-gray-700/50">
                         <td colSpan={7} className="px-6 py-4 border-t border-gray-100 dark:border-gray-700">
-                          <ExpandedDetail book={book} />
+                          <ExpandedDetail book={book} userId={currentUserId} />
                         </td>
                       </tr>
                     )}
