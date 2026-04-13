@@ -1,25 +1,32 @@
 # home-library-frontend
 
-React frontend for the Home Library app. Allows authenticated users to manage a shared book collection with search, filtering, sorting, pagination, and a dashboard with collection stats.
+React frontend for the Home Library app. Allows authenticated users to manage a shared physical book collection with search, filtering, sorting, pagination, per-user reading status, public sharing, and a dashboard with collection stats.
 
 ---
 
 ## Features
 
-- Login with JWT authentication and automatic redirect on token expiry
-- Password reset flow — request OTP via email, validate, reset with password strength enforcement; back to login link and resend count shown on reset screen
-- Book table with expandable rows — click any row to reveal labelled genre list and description
+- Login with JWT via HttpOnly cookie, automatic session expiry warning and extension
+- Multiple password reset flows: OTP (superadmin), admin-approved, first-time login
+- Book table with expandable rows — click any row to reveal genres, location, description, public sharing status
 - Book management — add, edit, delete with per-user reading status (read, reading, want to read)
-- Sortable columns — title, author, house (disabled during Atlas Search)
+- One-way status transitions enforced (can't go backwards once reading or read)
+- Date locking — manually set started/finished dates lock after first save
+- Rating locking — star rating cannot be changed after saving
+- Public sharing toggle per book — appears on a public unauthenticated page
+- Inline public link copy in expanded row and in the Add/Edit modal when sharing is on
+- Sort by title, author, house (disabled during text search)
 - Full-text search via Atlas Search with cursor-based prev/next pagination
-- Filter by house (single-select), genre (multi-select, AND semantics), and reading status — collapsible 3-column filter panel with active filter badge count and dismissible filter summary tags
-- Numbered page pagination with ellipsis for regular browsing; prev/next with page indicator on mobile
-- Dashboard — total books, books by house, books by genre, per-user reading status bars, recently added
-- Light/dark theme toggle persisted to the database per user
+- Filter by house (single), genre (multi-select AND), language (single), status — collapsible panel with active badge count and dismissible filter tags
+- "No Status" filter shows books the current user hasn't touched (browse only, incompatible with search)
+- Numbered page pagination with ellipsis for browse mode; prev/next on mobile
+- Dashboard — total books, books by house, books by genre, recently added
+- Discover page — personal reading stats, genre breakdown, recommendations, recently finished by others, reading timeline
+- Admin panel — reference data management, bulk CSV import (with makePublic support), user management (superadmin only)
+- Settings modal — light/dark theme toggle, display name edit, public library link copy, "Make all private" button
 - Collapsible desktop sidebar, slide-in mobile sidebar with backdrop
-- Responsive layout — book cards on mobile, full table on desktop; dashboard grids stack on mobile
-- Skeleton loading states throughout, toast notifications for all actions
-- CSP and security headers via `vercel.json`
+- Responsive layout — book cards on mobile, full sortable table on desktop
+- Skeleton loading states throughout, typed toast notifications with close button
 
 ---
 
@@ -32,7 +39,7 @@ React frontend for the Home Library app. Allows authenticated users to manage a 
 | Routing | React Router v6 |
 | Styling | Tailwind CSS |
 | Icons | Lucide React |
-| Notifications | React Hot Toast |
+| Notifications | react-hot-toast |
 | HTTP | Fetch API (centralised in `api.js`) |
 
 ---
@@ -44,22 +51,30 @@ home-library-frontend/
 ├── public/
 ├── src/
 │   ├── components/
-│   │   ├── Layout.jsx              # Sidebar, navbar, theme toggle, settings modal
-│   │   └── ProtectedRoute.jsx      # JWT expiry check — redirects if token invalid
+│   │   ├── BookModal.jsx         # Add/edit book form with inline public link
+│   │   ├── DeleteModal.jsx       # Delete confirmation modal
+│   │   ├── Layout.jsx            # Sidebar, navbar, settings modal, session banner
+│   │   ├── ProtectedRoute.jsx    # Session check — redirects if expired
+│   │   └── SessionContext.js     # Session warning/extend/logout context
 │   ├── data/
-│   │   ├── houses.json             # House options for book form and filters
-│   │   └── genres.json             # Genre options for book form and filters
+│   │   └── bookConstants.js      # STATUS_STYLES, STATUS_LABELS, STATUSES, FILTER_STATUSES
 │   ├── pages/
-│   │   ├── Books.jsx               # Book table, search, filters, sort, pagination, modals
-│   │   ├── Dashboard.jsx           # Stats cards and bar charts
-│   │   └── Login.jsx               # Login + forgot password + OTP reset flow
-│   ├── api.js                      # All API calls — single source of truth for base URL
-│   └── app.jsx                     # Router setup and route definitions
-├── vercel.json                     # Security headers (CSP, X-Frame-Options, etc.)
-├── .env.local                      # Local environment variables (never commit)
+│   │   ├── Admin.jsx             # Reference data, bulk import, user management
+│   │   ├── Books.jsx             # Book table, search, filters, sort, pagination
+│   │   ├── Dashboard.jsx         # Stats cards and bar charts
+│   │   ├── Discover.jsx          # Personal stats, recommendations, timeline
+│   │   ├── Login.jsx             # Login + all password reset flows
+│   │   └── PublicBooks.jsx       # Public unauthenticated book page
+│   ├── App.jsx                   # Router setup, Toaster configuration
+│   ├── api.js                    # All API calls — single source of truth
+│   ├── index.css                 # Tailwind directives
+│   └── main.jsx                  # React root render
+├── vercel.json                   # Security headers (CSP, X-Frame-Options, etc.)
+├── .env.local                    # Local environment variables (never commit)
 ├── .gitignore
 ├── index.html
 ├── package.json
+├── postcss.config.js
 ├── tailwind.config.js
 └── vite.config.js
 ```
@@ -74,23 +89,19 @@ home-library-frontend/
 
 ### Steps
 
-1. Clone the repo:
+1. Clone and install:
    ```bash
    git clone https://github.com/your-username/home-library-frontend.git
    cd home-library-frontend
-   ```
-
-2. Install dependencies:
-   ```bash
    npm install
    ```
 
-3. Create a `.env.local` file in the project root:
+2. Create a `.env.local` file in the project root:
    ```env
    VITE_API_BASE=http://localhost:3000
    ```
 
-4. Start the development server:
+3. Start the dev server:
    ```bash
    npm run dev
    ```
@@ -102,72 +113,66 @@ home-library-frontend/
 
 ### Local development
 
-Create a `.env.local` file in the project root. Vite reads this automatically and it is excluded from Git by default.
+| Variable | Value |
+|---|---|
+| `VITE_API_BASE` | `http://localhost:3000` |
 
-| Variable | Description | Value |
-|---|---|---|
-| `VITE_API_BASE` | URL of the backend API | `http://localhost:3000` |
+### Production (Vercel)
 
-### Production
-
-Do **not** create a `.env` file for production. Set environment variables in the Vercel dashboard instead — Vite embeds them at build time so they must be present before the build runs.
+Set in the Vercel dashboard before the build runs — Vite embeds them at build time.
 
 | Variable | Value |
 |---|---|
-| `VITE_API_BASE` | Your Railway backend URL — must include `https://` prefix, e.g. `https://home-library-backend.up.railway.app` |
+| `VITE_API_BASE` | Your Railway backend URL — must include `https://` prefix |
 
 ---
 
 ## Key Implementation Notes
 
-**API layer (`api.js`)** — All HTTP calls go through a single `request()` function. It automatically attaches the JWT from `localStorage`, detects 401 responses (expired or invalid token), clears stored credentials, and redirects to the login page by throwing a named `AbortError` so callers don't show a toast on redirect. Public endpoints (login, OTP, reset) use a separate `publicRequest()` that skips auth headers entirely.
+**API layer (`api.js`)** — All HTTP calls go through a single `request()` function that attaches credentials (the JWT HttpOnly cookie), detects 401 responses, clears localStorage, and redirects to login. Public endpoints (login, OTP, reset, public books) use a separate `publicRequest()` that skips auth entirely.
 
-**ProtectedRoute** — Decodes the JWT payload client-side and checks the `exp` field with a 30-second buffer before rendering any protected page. An expired or malformed token is caught here and redirected to `/` before any API calls are made. This is a UX optimisation — the real security gate is `jwt.verify()` in the backend middleware.
+**Session management (`ProtectedRoute` + `SessionContext`)** — On mount and every 5 minutes, `ProtectedRoute` calls `GET /me` to check token validity and milliseconds remaining. If < 10 minutes remain, an amber warning banner appears. Extending the session calls `POST /refresh-token` followed by another `GET /me` to read the actual new expiry. A ref prevents duplicate "session expired" toasts.
 
-**Search vs browse pagination** — Regular browsing and filter-only queries use offset pagination (numbered pages) via Mongoose. Text search uses cursor-based pagination (prev/next only) via Atlas Search because relevance-ranked results cannot be mapped to stable page numbers.
+**Password reset flows** — `sendResetOTP` returns a `method` field: `otp` (superadmin, OTP sent via email), `first_login` (new user, no password yet), `approved` (admin pre-approved), `already_registered` (existing user, needs admin approval), or `contact_admin` (unknown email). The login page renders a different screen for each.
 
-**Expandable rows** — Each book row has a chevron on the left that rotates 180° when expanded. Clicking anywhere on the row toggles the expanded panel, which shows labelled genre chips and a labelled description. Edit/Delete buttons use `e.stopPropagation()` to prevent accidental row expansion. On mobile, books render as cards instead of table rows — the same expand/collapse behaviour applies.
+**Search vs browse** — `isAtlasSearch` is true when a text query is present (Atlas Search + cursor pagination). Filters without text use MongoDB aggregation + offset pagination. Column sorting is only available in browse mode. The "No Status" filter is hidden during search since Atlas Search can't index absence of a subdocument.
 
-**Filter mode detection** — `isAtlasSearch` is true when a text query is present (routes to Atlas Search + cursor pagination). `hasFilters` is true when only dropdown filters are set (routes to Mongoose + offset pagination). Column sorting is disabled during Atlas Search since relevance ordering takes precedence.
+**Genre filtering** — Multi-select with AND semantics. Active genres sent as repeated query params. Backend uses `$all` in browse mode and multiple `equals` clauses in Atlas Search.
 
-**Genre filtering** — Genre supports multi-select with AND semantics. Selected genres are sent as repeated query params (`filterGenre=Fiction&filterGenre=Horror`). The backend uses `$all` in Mongoose and multiple `equals` clauses in Atlas Search compound filters to enforce AND behaviour. Active filters are shown as dismissible tags below the search bar.
+**Status transitions** — One-way enforcement mirrors the backend: null → want to read → reading → read. Backwards transitions are disabled in the UI. Once "read", the status pill is locked.
 
-**Responsive layout** — Books page shows a card list on mobile (`md:hidden`) and the full table on desktop (`hidden md:block`). The filter panel uses `grid-cols-1 sm:grid-cols-3` so it stacks on mobile. Pagination shows a compact `page / total` indicator on mobile instead of numbered buttons. Dashboard grids use `grid-cols-1 md:grid-cols-X` throughout so all panels stack on small screens. The Recently Added section renders a table on desktop and stacked rows on mobile.
+**Date and rating locking** — `startedAtLocked` and `finishedAtLocked` flags are stored on the status entry. If a date was manually changed (not auto-set), it locks after the first save. Ratings lock immediately on first save. Lock icons appear next to locked fields.
 
-**Theme** — The active theme is stored in MongoDB per user and loaded from `localStorage` on mount to avoid a flash of the wrong theme on page load. Changes are persisted to the backend via `PATCH /users/theme`.
+**Public sharing** — `isPublic` per book is stored as `publicByUsers: [ObjectId]` on the book document, independent of reading status. The Settings modal shows the public link, count of shared books, and a "Make all private" button that fires a single `POST /users/make-all-private`.
 
-**SidebarContent** — Defined outside the `Layout` component so it isn't re-created on every render, which previously caused unnecessary re-mounts of nav items on any state change in Layout.
+**Toasts** — `react-hot-toast` with custom `ToastBar` render: dark green for success, dark red for error, dark gray for default. Each toast has an × close button.
+
+**Theme** — Stored in MongoDB per user, read from localStorage on mount to avoid flash. Tailwind dark mode is `class`-based — `document.documentElement.classList.toggle("dark", ...)` is called on theme change.
+
+**Sidebar** — `SidebarContent` is defined outside `Layout` to prevent re-creation on every Layout state change. Collapse animates width; text uses opacity + width transition to fade without layout shift.
 
 ---
 
 ## Security Headers (`vercel.json`)
 
-The `vercel.json` at the project root sets the following headers on all responses:
-
-| Header | Value |
+| Header | Purpose |
 |---|---|
-| `Content-Security-Policy` | Restricts script, style, and connect sources to self + Railway backend |
-| `X-Frame-Options` | `DENY` — prevents clickjacking via iframe embedding |
-| `X-Content-Type-Options` | `nosniff` — prevents MIME-type sniffing |
-| `Referrer-Policy` | `strict-origin-when-cross-origin` |
+| `Content-Security-Policy` | Restricts scripts, styles, and API connections to known origins |
+| `X-Frame-Options: DENY` | Prevents clickjacking via iframe |
+| `X-Content-Type-Options: nosniff` | Prevents MIME-type sniffing |
+| `Referrer-Policy` | Limits referrer info sent to external sites |
 | `Permissions-Policy` | Disables camera, microphone, geolocation |
 
-**Important** — after deploying the backend, update the `connect-src` value in `vercel.json` to match your actual Railway URL, then redeploy.
+**Important** — update the `connect-src` value in `vercel.json` with your actual Railway URL before deploying.
 
 ---
 
 ## Deployment (Vercel)
 
-1. Push your code to GitHub.
-2. Go to [vercel.com](https://vercel.com) → Add New Project → select `home-library-frontend`.
-3. Vercel will auto-detect Vite. Leave all build settings as default.
-4. Go to **Settings → Environment Variables** and add:
-   - `VITE_API_BASE` = `https://your-railway-url.up.railway.app` (include `https://`)
-5. Update `vercel.json` — replace `your-railway-domain.up.railway.app` in the `connect-src` directive with your actual Railway URL.
-6. Click **Deploy**. Vercel will give you a public URL.
-7. Copy that URL and set it as `CORS_ORIGIN` in your Railway backend environment variables.
-8. Vercel redeploys automatically on every `git push`.
-
-### Costs
-
-Vercel Hobby plan is free. There are no charges for personal projects within the generous free tier limits.
+1. Push to GitHub.
+2. Go to [vercel.com](https://vercel.com) → Add New Project → select your repo.
+3. Vite is auto-detected. Leave build settings as default.
+4. Add environment variable: `VITE_API_BASE` = `https://your-railway-url.up.railway.app`
+5. Update `vercel.json` — replace the placeholder in `connect-src` with your actual Railway URL.
+6. Deploy. Copy the Vercel URL and set it as `CORS_ORIGIN` in Railway.
+7. Subsequent deploys happen automatically on `git push`.

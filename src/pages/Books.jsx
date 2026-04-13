@@ -140,7 +140,6 @@ export default function Books() {
 
   const isAtlasSearch = search.trim() !== "";
   const hasFilters = !!filterHouse || filterGenres.length > 0 || !!filterLanguage || !!filterStatus;
-  const isSearchActive = isAtlasSearch || hasFilters;
 
   const activeFilters = useMemo(
     () => ({ house: filterHouse, genres: filterGenres, language: filterLanguage, status: filterStatus }),
@@ -685,7 +684,7 @@ export default function Books() {
           )}
 
           {filterStatus && (
-            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs ${STATUS_STYLES[filterStatus]}`}>
+            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs ${filterStatus === "no-status" ? "bg-slate-600 text-white" : STATUS_STYLES[filterStatus]}`}>
               Status: {STATUS_LABELS[filterStatus]}
               <button type="button" onClick={() => setFilterStatus("")}
                 className="ml-0.5 font-bold leading-none opacity-70 hover:opacity-100">×</button>

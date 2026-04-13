@@ -52,36 +52,6 @@ function ConfirmModal({ title, message, confirmLabel = "Confirm", confirmClass =
     );
 }
 
-// ─── Password strength helpers ────────────────────────────────────────────────
-
-function usePasswordChecks(password) {
-    return {
-        length: password.length >= 8,
-        uppercase: /[A-Z]/.test(password),
-        number: /\d/.test(password),
-        special: /[!@#$%^&*(),.?":{}|<>]/.test(password),
-    };
-}
-
-function PasswordRules({ checks }) {
-    const rules = [
-        { key: "length", label: "At least 8 characters" },
-        { key: "uppercase", label: "1 uppercase letter" },
-        { key: "number", label: "1 number" },
-        { key: "special", label: "1 special character" },
-    ];
-    return (
-        <div className="space-y-1 mt-1">
-            {rules.map(({ key, label }) => (
-                <div key={key} className={`text-xs flex items-center gap-1.5 ${checks[key] ? "text-green-600 dark:text-green-400" : "text-red-500"}`}>
-                    <span>{checks[key] ? "✓" : "✗"}</span>
-                    <span>{label}</span>
-                </div>
-            ))}
-        </div>
-    );
-}
-
 // ─── Add User Modal ───────────────────────────────────────────────────────────
 
 function AddUserModal({ onClose, onAdded }) {

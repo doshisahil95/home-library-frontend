@@ -1,4 +1,4 @@
-import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Link, Outlet, useLocation } from "react-router-dom";
 import { useState, useEffect, useRef } from "react";
 import { LayoutDashboard, BookOpen, Compass, ShieldCheck, ChevronLeft, ChevronRight, Menu, X } from "lucide-react";
 import toast from "react-hot-toast";
@@ -70,7 +70,6 @@ function SidebarContent({ isCollapsed, currentPath, isAdmin }) {
 
 export default function Layout() {
   const location = useLocation();
-  const navigate = useNavigate();
 
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -425,7 +424,7 @@ function Modal({ title, children, onClose, userId, userName, setUserName, public
       onClick={onClose}
     >
       <div
-        className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-xl w-full max-w-md"
+        className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-lg font-bold mb-4 text-gray-800 dark:text-white">{title}</h2>
