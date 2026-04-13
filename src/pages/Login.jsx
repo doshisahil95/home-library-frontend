@@ -188,6 +188,8 @@ export default function Login() {
       } else if (data.method === "first_login") {
         setResetMethod("first_login");
         setMode("reset");
+      } else if (data.method === "already_registered") {
+        setMode("alreadyRegistered");
       } else {
         // contact_admin
         setMode("contactAdmin");
@@ -305,15 +307,35 @@ export default function Login() {
           </form>
         )}
 
+        {/* ---- ALREADY REGISTERED ---- */}
+        {mode === "alreadyRegistered" && (
+          <div className="space-y-4">
+            <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg text-center">
+              <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                You've already set your password
+              </p>
+              <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                To reset it, ask your admin to approve a password reset for your account.
+              </p>
+            </div>
+            <div
+              className="text-center text-sm cursor-pointer text-blue-600 dark:text-blue-400 hover:underline"
+              onClick={() => switchMode("login")}
+            >
+              Back to Login
+            </div>
+          </div>
+        )}
+
         {/* ---- CONTACT ADMIN ---- */}
         {mode === "contactAdmin" && (
           <div className="space-y-4">
             <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg text-center">
               <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
-                Password reset not available
+                Password reset requires admin approval
               </p>
               <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
-                Please contact your admin to request a password reset.
+                Please ask your admin to approve a password reset for your account.
               </p>
             </div>
             <div
@@ -341,7 +363,7 @@ export default function Login() {
               disabled={loginLoading}
               className="w-full bg-blue-600 text-white py-2 rounded-lg disabled:opacity-60"
             >
-              {loginLoading ? "Checking..." : "Proceed with Password Reset"}
+              {loginLoading ? "Checking..." : "Continue"}
             </button>
 
             <div

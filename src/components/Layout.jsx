@@ -315,6 +315,74 @@ export default function Layout() {
   );
 }
 
+// ─── Name editor ─────────────────────────────────────────────────────────────
+
+function NameEditor({ userName, setUserName }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(userName || "");
+  const [saving, setSaving] = useState(false);
+
+  const [nameError, setNameError] = useState("");
+
+  const handleSave = async () => {
+    if (!value.trim()) { setNameError("Name cannot be empty"); return; }
+    setNameError("");
+    if (value.trim() === userName) { setEditing(false); return; }
+    try {
+      setSaving(true);
+      const res = await updateProfile({ name: value.trim() });
+      setUserName(res.name);
+      try {
+        const user = JSON.parse(localStorage.getItem("user")) || {};
+        user.name = res.name;
+        localStorage.setItem("user", JSON.stringify(user));
+      } catch { /* ignore */ }
+      setEditing(false);
+      toast.success("Name updated");
+    } catch (err) {
+      toast.error(err.message || "Failed to update name");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (editing) {
+    return (
+      <>
+        <div className="flex items-center gap-2">
+          <input
+            autoFocus
+            value={value}
+            onChange={(e) => { setValue(e.target.value); setNameError(""); }}
+            maxLength={100}
+            onKeyDown={(e) => { if (e.key === "Enter") handleSave(); if (e.key === "Escape") setEditing(false); }}
+            className={`flex-1 px-3 py-1.5 text-sm rounded-lg border dark:bg-gray-700 dark:text-white ${nameError ? "border-red-500" : ""}`}
+          />
+          <button onClick={handleSave} disabled={saving}
+            className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
+            {saving ? "Saving..." : "Save"}
+          </button>
+          <button onClick={() => { setEditing(false); setNameError(""); }}
+            className="px-3 py-1.5 text-xs bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 rounded-lg">
+            Cancel
+          </button>
+        </div>
+        {nameError && <p className="text-xs text-red-500 mt-1">{nameError}</p>}
+      </>
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-sm text-gray-700 dark:text-gray-300">{userName || "—"}</span>
+      <button onClick={() => { setValue(userName || ""); setEditing(true); }}
+        className="text-xs text-blue-600 dark:text-blue-400 hover:underline">
+        Edit
+      </button>
+    </div>
+  );
+}
+
 // ─── Public link copy ─────────────────────────────────────────────────────────
 
 function PublicLinkCopy({ userId }) {

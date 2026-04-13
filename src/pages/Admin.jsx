@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 
 import toast from "react-hot-toast";
@@ -290,6 +290,7 @@ function ReferenceSection({ title, color, items, loading, onAdd, onEdit, onDelet
 function CSVImportTab() {
     const [csvText, setCsvText] = useState("");
     const [fileName, setFileName] = useState("");
+    const fileInputRef = useRef(null);
     const [stopOnError, setStopOnError] = useState(false);
     const [validating, setValidating] = useState(false);
     const [importing, setImporting] = useState(false);
@@ -352,6 +353,8 @@ function CSVImportTab() {
         setPhase("idle");
         setValidResult(null);
         setImportResult(null);
+        // Clear the native file input so the same file can be re-selected
+        if (fileInputRef.current) fileInputRef.current.value = "";
     };
 
     return (
@@ -375,8 +378,9 @@ function CSVImportTab() {
             <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4 text-xs text-gray-500 dark:text-gray-400 space-y-1 border border-gray-200 dark:border-gray-600">
                 <p className="font-semibold text-gray-600 dark:text-gray-300 mb-2">CSV Format</p>
                 <p><span className="font-medium">Required:</span> title, author, house, genre</p>
-                <p><span className="font-medium">Optional:</span> language, locationInHouse, description</p>
+                <p><span className="font-medium">Optional:</span> language, locationInHouse, description, makePublic</p>
                 <p><span className="font-medium">Multiple genres:</span> separate with semicolon — e.g. <code className="bg-gray-200 dark:bg-gray-600 px-1 rounded">Fiction;Fantasy</code></p>
+                <p><span className="font-medium">makePublic:</span> set to <code className="bg-gray-200 dark:bg-gray-600 px-1 rounded">true</code> to show the book on your public page</p>
                 <p><span className="font-medium">Max rows:</span> 500 per upload</p>
             </div>
 
@@ -392,7 +396,7 @@ function CSVImportTab() {
                             <span className="text-xs text-green-600 dark:text-green-400">File loaded</span>
                         )}
                     </div>
-                    <input type="file" accept=".csv" className="hidden" onChange={handleFileChange} />
+                    <input type="file" accept=".csv" className="hidden" onChange={handleFileChange} ref={fileInputRef} />
                 </label>
 
                 {/* Stop on error toggle */}

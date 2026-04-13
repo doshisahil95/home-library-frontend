@@ -208,11 +208,11 @@ export function importCSV(csvText, stopOnError) {
 // Generates and triggers download of a sample CSV file.
 // Called entirely in the browser — no server request needed.
 export function downloadSampleCSV() {
-    const header = "title,author,house,genre,language,locationInHouse,description";
+    const header = "title,author,house,genre,language,locationInHouse,description,makePublic";
     const rows = [
-        '"The Alchemist","Paulo Coelho","Brahma Courts","Fiction;Fantasy","English","Shelf 1 Row 2","A journey of self-discovery."',
-        '"Sapiens","Yuval Noah Harari","Marvel","Biography;Science","English","Shelf 3","A brief history of humankind."',
-        '"Cosmos","Carl Sagan","Brahma Courts","Science","English","","An exploration of the universe."',
+        '"The Alchemist","Paulo Coelho","Brahma Courts","Fiction;Fantasy","English","Shelf 1 Row 2","A journey of self-discovery.","true"',
+        '"Sapiens","Yuval Noah Harari","Marvel","Biography;Science","English","Shelf 3","A brief history of humankind.","false"',
+        '"Cosmos","Carl Sagan","Brahma Courts","Science","English","","An exploration of the universe.",""',
     ];
     const csv = [header, ...rows].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });

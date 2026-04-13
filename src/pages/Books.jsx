@@ -765,7 +765,7 @@ export default function Books() {
             <col style={{ width: "12%" }} />
             <col style={{ width: "12%" }} />
           </colgroup>
-          <thead className="bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-sm">
+          <thead className="bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-sm">
             <tr>
               <th className="px-2 py-3 w-4" />
               <th className={`px-4 py-3 select-none transition-colors ${isAtlasSearch ? "text-gray-400 dark:text-gray-500" : "cursor-pointer hover:text-blue-600 dark:hover:text-blue-400"}`}
