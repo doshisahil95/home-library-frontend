@@ -18,6 +18,9 @@ import {
     validateCSV,
     importCSV,
     downloadSampleCSV,
+    validateRefCSV,
+    importRefCSV,
+    downloadSampleRefCSV,
 } from "../api";
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
@@ -60,7 +63,6 @@ function AddUserModal({ onClose, onAdded }) {
     const [loading, setLoading] = useState(false);
     const [showConfirm, setShowConfirm] = useState(false);
 
-    // Fix 4 — label/button text matches role
     const roleLabel = form.role === "admin" ? "Admin" : "User";
 
     const handleSubmit = (e) => {
@@ -107,8 +109,6 @@ function AddUserModal({ onClose, onAdded }) {
                             onChange={(e) => setForm({ ...form, email: e.target.value })}
                             className="w-full px-4 py-2 rounded-lg border dark:bg-gray-700 dark:text-white text-sm"
                         />
-
-                        {/* Role */}
                         <div>
                             <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Role</label>
                             <div className="flex gap-2">
@@ -124,7 +124,6 @@ function AddUserModal({ onClose, onAdded }) {
                                 ))}
                             </div>
                         </div>
-
                         <div className="flex justify-end gap-3 pt-2">
                             <button type="button" onClick={onClose}
                                 className="px-4 py-2 rounded-lg bg-gray-300 dark:bg-gray-600 dark:text-white text-sm">
@@ -152,13 +151,249 @@ function AddUserModal({ onClose, onAdded }) {
     );
 }
 
-// ─── Reference data section ───────────────────────────────────────────────────
+// ─── Reference data CSV import modal ─────────────────────────────────────────
+// Handles validate-then-import flow for a single-column name CSV.
+// type is "genres" | "languages".
 
-function ReferenceSection({ title, color, items, loading, onAdd, onEdit, onDelete }) {
+function RefCSVImportModal({ type, onClose, onImported }) {
+    const label = type === "genres" ? "Genres" : "Languages";
+    const [csvText, setCsvText] = useState("");
+    const [fileName, setFileName] = useState("");
+    const fileInputRef = useRef(null);
+
+    const [phase, setPhase] = useState("idle"); // idle | validated | imported
+    const [validResult, setValidResult] = useState(null);
+    const [importResult, setImportResult] = useState(null);
+    const [validating, setValidating] = useState(false);
+    const [importing, setImporting] = useState(false);
+
+    const handleFileChange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        if (!file.name.endsWith(".csv")) { toast.error("Please upload a .csv file"); return; }
+        setFileName(file.name);
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            setCsvText(ev.target.result);
+            setPhase("idle");
+            setValidResult(null);
+            setImportResult(null);
+        };
+        reader.readAsText(file);
+    };
+
+    const handleValidate = async () => {
+        if (!csvText) { toast.error("Please upload a CSV file first"); return; }
+        try {
+            setValidating(true);
+            const result = await validateRefCSV(type, csvText);
+            setValidResult(result);
+            setPhase("validated");
+        } catch (err) {
+            toast.error(err.message || "Validation failed");
+        } finally {
+            setValidating(false);
+        }
+    };
+
+    const handleImport = async () => {
+        if (!csvText) return;
+        try {
+            setImporting(true);
+            const result = await importRefCSV(type, csvText);
+            setImportResult(result);
+            setPhase("imported");
+            if (result.added > 0) {
+                toast.success(`${result.added} ${type} imported`);
+                onImported();
+            }
+        } catch (err) {
+            toast.error(err.message || "Import failed");
+        } finally {
+            setImporting(false);
+        }
+    };
+
+    const handleReset = () => {
+        setCsvText("");
+        setFileName("");
+        setPhase("idle");
+        setValidResult(null);
+        setImportResult(null);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+    };
+
+    return (
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50 px-4" onClick={onClose}>
+            <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">Import {label} from CSV</h2>
+                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xl leading-none">×</button>
+                </div>
+
+                {/* Format hint */}
+                <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 text-xs text-gray-500 dark:text-gray-400 mb-4 border border-gray-200 dark:border-gray-600">
+                    <p className="font-semibold text-gray-600 dark:text-gray-300 mb-1">CSV Format</p>
+                    <p>Single column with header <code className="bg-gray-200 dark:bg-gray-600 px-1 rounded">name</code>, one entry per row. Max 200 rows.</p>
+                    <p className="mt-1">Entries already in the database are skipped automatically — not errors.</p>
+                </div>
+
+                <div className="space-y-3">
+                    {/* File upload + sample download */}
+                    <div className="flex gap-2">
+                        <label className="flex-1 flex flex-col items-center justify-center h-24 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition bg-white dark:bg-gray-800">
+                            <span className="text-xl">📄</span>
+                            <span className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                {fileName ? fileName : "Click to upload CSV"}
+                            </span>
+                            {fileName && <span className="text-xs text-green-600 dark:text-green-400">File loaded</span>}
+                            <input type="file" accept=".csv" className="hidden" onChange={handleFileChange} ref={fileInputRef} />
+                        </label>
+                        <button
+                            onClick={() => downloadSampleRefCSV(type)}
+                            className="shrink-0 px-3 py-2 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition self-stretch flex items-center"
+                        >
+                            ↓ Sample
+                        </button>
+                    </div>
+
+                    {/* Action buttons */}
+                    <div className="flex gap-2 flex-wrap">
+                        <button
+                            onClick={handleValidate}
+                            disabled={!csvText || validating || importing}
+                            className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                        >
+                            {validating ? "Validating..." : "Validate"}
+                        </button>
+                        {phase === "validated" && validResult?.validCount > 0 && (
+                            <button
+                                onClick={handleImport}
+                                disabled={importing}
+                                className="px-4 py-2 rounded-lg bg-green-600 text-white text-sm hover:bg-green-700 disabled:opacity-50 transition"
+                            >
+                                {importing ? "Importing..." : `Import ${validResult.validCount} ${type}`}
+                            </button>
+                        )}
+                        {phase !== "idle" && (
+                            <button
+                                onClick={handleReset}
+                                className="px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 text-sm hover:bg-gray-300 dark:hover:bg-gray-500 transition"
+                            >
+                                Reset
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Validation result */}
+                    {phase === "validated" && validResult && (
+                        <div className="space-y-2">
+                            <div className="flex flex-wrap gap-2">
+                                {validResult.validCount > 0 && (
+                                    <div className="flex-1 min-w-0 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl px-3 py-2">
+                                        <p className="text-sm font-semibold text-green-700 dark:text-green-400">
+                                            ✓ {validResult.validCount} new {type} ready to import
+                                        </p>
+                                    </div>
+                                )}
+                                {validResult.skippedCount > 0 && (
+                                    <div className="flex-1 min-w-0 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl px-3 py-2">
+                                        <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">
+                                            ↷ {validResult.skippedCount} already exist — will be skipped
+                                        </p>
+                                    </div>
+                                )}
+                                {validResult.errorCount > 0 && (
+                                    <div className="flex-1 min-w-0 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl px-3 py-2">
+                                        <p className="text-sm font-semibold text-red-700 dark:text-red-400">
+                                            ✗ {validResult.errorCount} rows with errors
+                                        </p>
+                                    </div>
+                                )}
+                                {validResult.validCount === 0 && validResult.skippedCount === 0 && validResult.errorCount === 0 && (
+                                    <div className="flex-1 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2">
+                                        <p className="text-sm text-gray-500 dark:text-gray-400">No rows found in file</p>
+                                    </div>
+                                )}
+                            </div>
+                            <RefErrorList errors={validResult.errors} />
+                        </div>
+                    )}
+
+                    {/* Import result */}
+                    {phase === "imported" && importResult && (
+                        <div className="space-y-2">
+                            <div className="flex flex-wrap gap-2">
+                                {importResult.added > 0 && (
+                                    <div className="flex-1 min-w-0 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl px-3 py-2">
+                                        <p className="text-sm font-semibold text-green-700 dark:text-green-400">
+                                            ✓ {importResult.added} {type} imported successfully
+                                        </p>
+                                    </div>
+                                )}
+                                {importResult.skipped > 0 && (
+                                    <div className="flex-1 min-w-0 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl px-3 py-2">
+                                        <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">
+                                            ↷ {importResult.skipped} skipped (already existed)
+                                        </p>
+                                    </div>
+                                )}
+                                {importResult.errorCount > 0 && (
+                                    <div className="flex-1 min-w-0 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl px-3 py-2">
+                                        <p className="text-sm font-semibold text-red-700 dark:text-red-400">
+                                            ✗ {importResult.errorCount} rows not imported
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                            <RefErrorList errors={importResult.errors} />
+                        </div>
+                    )}
+                </div>
+
+                <div className="mt-5 flex justify-end">
+                    <button onClick={onClose}
+                        className="px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 text-sm hover:bg-gray-300 dark:hover:bg-gray-500">
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function RefErrorList({ errors }) {
+    if (!errors || errors.length === 0) return null;
+    return (
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div className="px-3 py-2 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Errors</p>
+            </div>
+            <div className="divide-y divide-gray-100 dark:divide-gray-700 max-h-48 overflow-y-auto">
+                {errors.map((err, i) => (
+                    <div key={i} className="px-3 py-2 flex items-center gap-3">
+                        <span className="text-xs text-gray-400 dark:text-gray-500 shrink-0">Row {err.row}</span>
+                        <span className="text-xs font-medium text-gray-700 dark:text-gray-200 truncate">{err.name}</span>
+                        <span className="text-xs text-red-600 dark:text-red-400 ml-auto shrink-0">{err.reason}</span>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+// ─── Reference data section ───────────────────────────────────────────────────
+// Houses don't get a CSV import button (physical locations — no generic list).
+// Genres and Languages get an import button that opens RefCSVImportModal.
+
+function ReferenceSection({ title, type, color, items, loading, onAdd, onEdit, onDelete, onImported }) {
     const [newName, setNewName] = useState("");
     const [editingId, setEditingId] = useState(null);
     const [editName, setEditName] = useState("");
     const [deleteTarget, setDeleteTarget] = useState(null);
+    const [showImport, setShowImport] = useState(false);
+
+    const supportsImport = type === "genres" || type === "languages";
 
     const handleAdd = () => {
         if (!newName.trim()) return;
@@ -180,82 +415,109 @@ function ReferenceSection({ title, color, items, loading, onAdd, onEdit, onDelet
     };
 
     return (
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg">
-            <h3 className="text-base font-semibold text-gray-700 dark:text-gray-200 mb-4">{title}</h3>
-
-            {loading ? (
-                <div className="flex flex-wrap gap-2">
-                    {[...Array(4)].map((_, i) => (
-                        <div key={i} className="h-7 rounded-full bg-gray-200 dark:bg-gray-700 animate-pulse" style={{ width: `${56 + i * 12}px` }} />
-                    ))}
+        <>
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg">
+                {/* Section header */}
+                <div className="flex items-center justify-between mb-4 gap-2">
+                    <h3 className="text-base font-semibold text-gray-700 dark:text-gray-200">{title}</h3>
+                    {supportsImport && (
+                        <button
+                            onClick={() => setShowImport(true)}
+                            className="shrink-0 px-3 py-1 text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition"
+                        >
+                            ↑ Import CSV
+                        </button>
+                    )}
                 </div>
-            ) : (
-                <div className="flex flex-wrap gap-2 mb-4">
-                    {items.map((item) => (
-                        <div key={item._id} className="flex items-center gap-1">
-                            {editingId === item._id ? (
-                                <div className="flex items-center gap-1">
-                                    <input
-                                        autoFocus
-                                        value={editName}
-                                        onChange={(e) => setEditName(e.target.value)}
-                                        onKeyDown={(e) => {
-                                            if (e.key === "Enter") handleEditSave(item._id);
-                                            if (e.key === "Escape") { setEditingId(null); setEditName(""); }
-                                        }}
-                                        className="px-2 py-0.5 rounded-lg border text-sm w-28 dark:bg-gray-700 dark:text-white"
-                                    />
-                                    <button onClick={() => handleEditSave(item._id)}
-                                        className="text-xs text-green-600 dark:text-green-400 hover:underline">Save</button>
-                                    <button onClick={() => { setEditingId(null); setEditName(""); }}
-                                        className="text-xs text-gray-400 hover:underline">Cancel</button>
-                                </div>
-                            ) : (
-                                <span className={`inline-flex items-center gap-1.5 pl-3 pr-2 py-1 rounded-full text-sm text-white ${pillColors[color]}`}>
-                                    {item.name}
-                                    <button onClick={() => { setEditingId(item._id); setEditName(item.name); }}
-                                        className="opacity-70 hover:opacity-100 text-xs leading-none" title="Edit">✎</button>
-                                    <button onClick={() => setDeleteTarget(item)}
-                                        className="opacity-70 hover:opacity-100 text-xs leading-none" title="Delete">×</button>
-                                </span>
-                            )}
-                        </div>
-                    ))}
-                </div>
-            )}
 
-            {/* Add new */}
-            <div className="flex gap-2">
-                <input
-                    type="text"
-                    placeholder={`Add ${title.toLowerCase().replace("s", "")}...`}
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-                    className="flex-1 px-3 py-1.5 rounded-lg border dark:bg-gray-700 dark:text-white text-sm"
-                />
-                <button onClick={handleAdd}
-                    className={`px-4 py-1.5 rounded-lg text-white text-sm ${pillColors[color]} opacity-90 hover:opacity-100`}>
-                    Add
-                </button>
+                {/* Pills */}
+                {loading ? (
+                    <div className="flex flex-wrap gap-2 mb-4">
+                        {[...Array(4)].map((_, i) => (
+                            <div key={i} className="h-7 rounded-full bg-gray-200 dark:bg-gray-700 animate-pulse" style={{ width: `${56 + i * 12}px` }} />
+                        ))}
+                    </div>
+                ) : (
+                    <div className="flex flex-wrap gap-2 mb-4">
+                        {items.map((item) => (
+                            <div key={item._id}>
+                                {editingId === item._id ? (
+                                    <div className="flex items-center gap-1">
+                                        <input
+                                            autoFocus
+                                            value={editName}
+                                            onChange={(e) => setEditName(e.target.value)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === "Enter") handleEditSave(item._id);
+                                                if (e.key === "Escape") { setEditingId(null); setEditName(""); }
+                                            }}
+                                            className="px-2 py-0.5 rounded-lg border text-sm w-28 dark:bg-gray-700 dark:text-white"
+                                        />
+                                        <button onClick={() => handleEditSave(item._id)}
+                                            className="text-xs text-green-600 dark:text-green-400 hover:underline whitespace-nowrap">Save</button>
+                                        <button onClick={() => { setEditingId(null); setEditName(""); }}
+                                            className="text-xs text-gray-400 hover:underline">Cancel</button>
+                                    </div>
+                                ) : (
+                                    <span className={`inline-flex items-center gap-1.5 pl-3 pr-2 py-1 rounded-full text-sm text-white ${pillColors[color]}`}>
+                                        {item.name}
+                                        <button onClick={() => { setEditingId(item._id); setEditName(item.name); }}
+                                            className="opacity-70 hover:opacity-100 text-xs leading-none" title="Edit">✎</button>
+                                        <button onClick={() => setDeleteTarget(item)}
+                                            className="opacity-70 hover:opacity-100 text-xs leading-none" title="Delete">×</button>
+                                    </span>
+                                )}
+                            </div>
+                        ))}
+                        {items.length === 0 && !loading && (
+                            <p className="text-xs text-gray-400 dark:text-gray-500 italic">No {title.toLowerCase()} yet</p>
+                        )}
+                    </div>
+                )}
+
+                {/* Add new — constrained width so input doesn't stretch on mobile */}
+                <div className="flex gap-2">
+                    <input
+                        type="text"
+                        placeholder={`Add ${title.toLowerCase().replace(/s$/, "")}...`}
+                        value={newName}
+                        onChange={(e) => setNewName(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+                        className="min-w-0 flex-1 px-3 py-1.5 rounded-lg border dark:bg-gray-700 dark:text-white text-sm"
+                    />
+                    <button
+                        onClick={handleAdd}
+                        className={`shrink-0 px-4 py-1.5 rounded-lg text-white text-sm ${pillColors[color]} opacity-90 hover:opacity-100`}
+                    >
+                        Add
+                    </button>
+                </div>
+
+                {deleteTarget && (
+                    <ConfirmModal
+                        title={`Delete ${title.replace(/s$/, "")}`}
+                        message={`Delete "${deleteTarget.name}"? This cannot be undone. If it is used by any books, deletion will be blocked.`}
+                        confirmLabel="Delete"
+                        confirmClass="bg-red-600 hover:bg-red-700"
+                        onConfirm={() => onDelete(deleteTarget._id, deleteTarget.name)}
+                        onClose={() => setDeleteTarget(null)}
+                    />
+                )}
             </div>
 
-            {deleteTarget && (
-                <ConfirmModal
-                    title={`Delete ${title.slice(0, -1)}`}
-                    message={`Delete "${deleteTarget.name}"? This cannot be undone. If it is used by any books, deletion will be blocked.`}
-                    confirmLabel="Delete"
-                    confirmClass="bg-red-600 hover:bg-red-700"
-                    onConfirm={() => onDelete(deleteTarget._id, deleteTarget.name)}
-                    onClose={() => setDeleteTarget(null)}
+            {showImport && (
+                <RefCSVImportModal
+                    type={type}
+                    onClose={() => setShowImport(false)}
+                    onImported={() => { onImported(); }}
                 />
             )}
-        </div>
+        </>
     );
 }
 
 
-// ─── CSV Import Tab ───────────────────────────────────────────────────────────
+// ─── CSV Import Tab (book import) ─────────────────────────────────────────────
 
 function CSVImportTab() {
     const [csvText, setCsvText] = useState("");
@@ -264,19 +526,14 @@ function CSVImportTab() {
     const [stopOnError, setStopOnError] = useState(false);
     const [validating, setValidating] = useState(false);
     const [importing, setImporting] = useState(false);
-
-    // Phase: idle | validated | imported
     const [phase, setPhase] = useState("idle");
-    const [validResult, setValidResult] = useState(null);  // { validCount, errorCount, errors }
-    const [importResult, setImportResult] = useState(null); // { added, errorCount, errors, stoppedEarly }
+    const [validResult, setValidResult] = useState(null);
+    const [importResult, setImportResult] = useState(null);
 
     const handleFileChange = (e) => {
         const file = e.target.files[0];
         if (!file) return;
-        if (!file.name.endsWith(".csv")) {
-            toast.error("Please upload a .csv file");
-            return;
-        }
+        if (!file.name.endsWith(".csv")) { toast.error("Please upload a .csv file"); return; }
         setFileName(file.name);
         const reader = new FileReader();
         reader.onload = (ev) => {
@@ -323,7 +580,6 @@ function CSVImportTab() {
         setPhase("idle");
         setValidResult(null);
         setImportResult(null);
-        // Clear the native file input so the same file can be re-selected
         if (fileInputRef.current) fileInputRef.current.value = "";
     };
 
@@ -344,7 +600,6 @@ function CSVImportTab() {
                 </button>
             </div>
 
-            {/* CSV format reference */}
             <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4 text-xs text-gray-500 dark:text-gray-400 space-y-1 border border-gray-200 dark:border-gray-600">
                 <p className="font-semibold text-gray-600 dark:text-gray-300 mb-2">CSV Format</p>
                 <p><span className="font-medium">Required:</span> title, author, house, genre</p>
@@ -354,7 +609,6 @@ function CSVImportTab() {
                 <p><span className="font-medium">Max rows:</span> 500 per upload</p>
             </div>
 
-            {/* File upload */}
             <div className="space-y-3">
                 <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition bg-white dark:bg-gray-800">
                     <div className="flex flex-col items-center gap-1">
@@ -362,14 +616,11 @@ function CSVImportTab() {
                         <span className="text-sm text-gray-500 dark:text-gray-400">
                             {fileName ? fileName : "Click to upload CSV"}
                         </span>
-                        {fileName && (
-                            <span className="text-xs text-green-600 dark:text-green-400">File loaded</span>
-                        )}
+                        {fileName && <span className="text-xs text-green-600 dark:text-green-400">File loaded</span>}
                     </div>
                     <input type="file" accept=".csv" className="hidden" onChange={handleFileChange} ref={fileInputRef} />
                 </label>
 
-                {/* Stop on error toggle */}
                 <div className="flex items-center justify-between px-4 py-3 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
                     <div>
                         <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Stop on first error</p>
@@ -386,7 +637,6 @@ function CSVImportTab() {
                     </button>
                 </div>
 
-                {/* Action buttons */}
                 <div className="flex gap-3">
                     <button
                         onClick={handleValidate}
@@ -415,7 +665,6 @@ function CSVImportTab() {
                 </div>
             </div>
 
-            {/* Validation result */}
             {phase === "validated" && validResult && (
                 <div className="space-y-3">
                     <div className="flex gap-3">
@@ -439,11 +688,10 @@ function CSVImportTab() {
                             </div>
                         )}
                     </div>
-                    <ErrorList errors={validResult.errors} />
+                    <BookErrorList errors={validResult.errors} />
                 </div>
             )}
 
-            {/* Import result */}
             {phase === "imported" && importResult && (
                 <div className="space-y-3">
                     <div className="flex gap-3">
@@ -463,21 +711,19 @@ function CSVImportTab() {
                             </div>
                         )}
                     </div>
-                    <ErrorList errors={importResult.errors} />
+                    <BookErrorList errors={importResult.errors} />
                 </div>
             )}
         </div>
     );
 }
 
-function ErrorList({ errors }) {
+function BookErrorList({ errors }) {
     if (!errors || errors.length === 0) return null;
     return (
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
             <div className="px-4 py-2 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
-                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                    Error Details
-                </p>
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Error Details</p>
             </div>
             <div className="divide-y divide-gray-100 dark:divide-gray-700 max-h-72 overflow-y-auto">
                 {errors.map((err, i) => (
@@ -508,22 +754,19 @@ export default function Admin() {
     const isSuperAdmin = currentUser?.role === "superadmin";
     const [activeTab, setActiveTab] = useState(isSuperAdmin ? "users" : "refdata");
 
-    // ── Users ────────────────────────────────────────────────────────────
     const [users, setUsers] = useState([]);
     const [usersLoading, setUsersLoading] = useState(true);
     const [showAddUser, setShowAddUser] = useState(false);
-    const [roleConfirm, setRoleConfirm] = useState(null); // { user, newRole }
-    const [deleteConfirm, setDeleteConfirm] = useState(null); // user
-    const [approveConfirm, setApproveConfirm] = useState(null); // user
-    const [revokeConfirm, setRevokeConfirm] = useState(null); // user
+    const [roleConfirm, setRoleConfirm] = useState(null);
+    const [deleteConfirm, setDeleteConfirm] = useState(null);
+    const [approveConfirm, setApproveConfirm] = useState(null);
+    const [revokeConfirm, setRevokeConfirm] = useState(null);
 
-    // ── Reference data ───────────────────────────────────────────────────
     const [genres, setGenres] = useState([]);
     const [houses, setHouses] = useState([]);
     const [languages, setLanguages] = useState([]);
     const [refLoading, setRefLoading] = useState(true);
 
-    // Guard — non-admin users who somehow land here get redirected
     useEffect(() => {
         try {
             const user = JSON.parse(localStorage.getItem("user"));
@@ -533,7 +776,6 @@ export default function Admin() {
         }
     }, []);
 
-    // Load users
     const loadUsers = useCallback(async () => {
         try {
             setUsersLoading(true);
@@ -546,7 +788,6 @@ export default function Admin() {
         }
     }, []);
 
-    // Load reference data
     const loadRefData = useCallback(async () => {
         try {
             setRefLoading(true);
@@ -566,9 +807,7 @@ export default function Admin() {
         loadRefData();
     }, []);
 
-    // ── User actions ─────────────────────────────────────────────────────
-
-    const handleChangeRole = async (user) => {
+    const handleChangeRole = (user) => {
         const newRole = user.role === "admin" ? "user" : "admin";
         setRoleConfirm({ user, newRole });
     };
@@ -614,8 +853,6 @@ export default function Admin() {
         }
     };
 
-    // ── Reference data actions ────────────────────────────────────────────
-
     const handleRefAdd = async (type, name) => {
         try {
             await createReferenceItem(type, name);
@@ -646,8 +883,6 @@ export default function Admin() {
         }
     };
 
-    // ─── Tabs ─────────────────────────────────────────────────────────────────
-
     const tabs = [
         ...(isSuperAdmin ? [{ id: "users", label: "Users" }] : []),
         { id: "refdata", label: "Reference Data" },
@@ -658,7 +893,6 @@ export default function Admin() {
         <div className="space-y-6">
             <h1 className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-gray-100 mt-4">Admin</h1>
 
-            {/* Tab bar */}
             <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-xl w-fit">
                 {tabs.map((tab) => (
                     <button
@@ -674,7 +908,7 @@ export default function Admin() {
                 ))}
             </div>
 
-            {/* ── Users tab ─────────────────────────────────────────────────────── */}
+            {/* ── Users tab ──────────────────────────────────────────────────────── */}
             {activeTab === "users" && (
                 <div className="space-y-4">
                     <div className="flex justify-between items-center">
@@ -721,10 +955,10 @@ export default function Admin() {
                                                     <td className="px-6 py-4 text-gray-600 dark:text-gray-300">{user.email}</td>
                                                     <td className="px-6 py-4">
                                                         <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${isSuperAdminUser
-                                                                ? "bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300"
-                                                                : user.role === "admin"
-                                                                    ? "bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300"
-                                                                    : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
+                                                            ? "bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300"
+                                                            : user.role === "admin"
+                                                                ? "bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300"
+                                                                : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
                                                             }`}>
                                                             {user.role}
                                                         </span>
@@ -735,7 +969,6 @@ export default function Admin() {
                                                             <span className="text-xs text-gray-400 dark:text-gray-500 italic w-full text-center block">Protected</span>
                                                         ) : (
                                                             <div className="flex items-center justify-end gap-2 flex-wrap">
-                                                                {/* Role toggle */}
                                                                 <button
                                                                     disabled={isSelf}
                                                                     onClick={() => handleChangeRole(user)}
@@ -744,13 +977,10 @@ export default function Admin() {
                                                                 >
                                                                     {`Make ${user.role === "admin" ? "User" : "Admin"}`}
                                                                 </button>
-
-                                                                {/* Password reset approve/revoke */}
                                                                 {hasPendingReset ? (
                                                                     <button
                                                                         onClick={() => setRevokeConfirm(user)}
                                                                         className="px-3 py-1 text-xs bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 rounded-lg hover:bg-amber-200 dark:hover:bg-amber-800"
-                                                                        title="Revoke password reset approval"
                                                                     >
                                                                         Revoke Reset
                                                                     </button>
@@ -764,8 +994,6 @@ export default function Admin() {
                                                                         Approve Reset
                                                                     </button>
                                                                 )}
-
-                                                                {/* Delete user */}
                                                                 <button
                                                                     disabled={isSelf}
                                                                     onClick={() => setDeleteConfirm(user)}
@@ -801,10 +1029,10 @@ export default function Admin() {
                                                         <p className="text-xs text-gray-400 mt-0.5">{formatDate(user.createdAt)}</p>
                                                     </div>
                                                     <span className={`px-2.5 py-1 rounded-full text-xs font-medium shrink-0 ${isSuperAdminUser
-                                                            ? "bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300"
-                                                            : user.role === "admin"
-                                                                ? "bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300"
-                                                                : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
+                                                        ? "bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300"
+                                                        : user.role === "admin"
+                                                            ? "bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300"
+                                                            : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
                                                         }`}>
                                                         {user.role}
                                                     </span>
@@ -819,26 +1047,18 @@ export default function Admin() {
                                                             {`Make ${user.role === "admin" ? "User" : "Admin"}`}
                                                         </button>
                                                         {hasPendingReset ? (
-                                                            <button
-                                                                onClick={() => setRevokeConfirm(user)}
-                                                                className="px-3 py-1 text-xs bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 rounded-lg"
-                                                            >
+                                                            <button onClick={() => setRevokeConfirm(user)}
+                                                                className="px-3 py-1 text-xs bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 rounded-lg">
                                                                 Revoke Reset
                                                             </button>
                                                         ) : (
-                                                            <button
-                                                                disabled={isSelf}
-                                                                onClick={() => setApproveConfirm(user)}
-                                                                className="px-3 py-1 text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-lg disabled:opacity-30 disabled:cursor-not-allowed"
-                                                            >
+                                                            <button disabled={isSelf} onClick={() => setApproveConfirm(user)}
+                                                                className="px-3 py-1 text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-lg disabled:opacity-30 disabled:cursor-not-allowed">
                                                                 Approve Reset
                                                             </button>
                                                         )}
-                                                        <button
-                                                            disabled={isSelf}
-                                                            onClick={() => setDeleteConfirm(user)}
-                                                            className="px-3 py-1 text-xs bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-lg disabled:opacity-30 disabled:cursor-not-allowed"
-                                                        >
+                                                        <button disabled={isSelf} onClick={() => setDeleteConfirm(user)}
+                                                            className="px-3 py-1 text-xs bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-lg disabled:opacity-30 disabled:cursor-not-allowed">
                                                             Remove
                                                         </button>
                                                     </div>
@@ -853,51 +1073,43 @@ export default function Admin() {
                 </div>
             )}
 
-            {/* ── Reference Data tab ────────────────────────────────────────────── */}
+            {/* ── Reference Data tab ─────────────────────────────────────────────── */}
             {activeTab === "refdata" && (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <ReferenceSection
-                        title="Genres"
-                        color="blue"
-                        items={genres}
-                        loading={refLoading}
+                        title="Genres" type="genres" color="blue"
+                        items={genres} loading={refLoading}
                         onAdd={(name) => handleRefAdd("genres", name)}
                         onEdit={(id, name) => handleRefEdit("genres", id, name)}
                         onDelete={(id, name) => handleRefDelete("genres", id, name)}
+                        onImported={loadRefData}
                     />
                     <ReferenceSection
-                        title="Houses"
-                        color="green"
-                        items={houses}
-                        loading={refLoading}
+                        title="Houses" type="houses" color="green"
+                        items={houses} loading={refLoading}
                         onAdd={(name) => handleRefAdd("houses", name)}
                         onEdit={(id, name) => handleRefEdit("houses", id, name)}
                         onDelete={(id, name) => handleRefDelete("houses", id, name)}
+                        onImported={loadRefData}
                     />
                     <ReferenceSection
-                        title="Languages"
-                        color="purple"
-                        items={languages}
-                        loading={refLoading}
+                        title="Languages" type="languages" color="purple"
+                        items={languages} loading={refLoading}
                         onAdd={(name) => handleRefAdd("languages", name)}
                         onEdit={(id, name) => handleRefEdit("languages", id, name)}
                         onDelete={(id, name) => handleRefDelete("languages", id, name)}
+                        onImported={loadRefData}
                     />
                 </div>
             )}
 
-            {/* ── Bulk Import tab ───────────────────────────────────────────────── */}
-            {activeTab === "csv" && (
-                <CSVImportTab />
-            )}
+            {/* ── Bulk Import tab ────────────────────────────────────────────────── */}
+            {activeTab === "csv" && <CSVImportTab />}
 
             {/* ── Modals ─────────────────────────────────────────────────────────── */}
 
             {showAddUser && (
-                <AddUserModal
-                    onClose={() => setShowAddUser(false)}
-                    onAdded={loadUsers}
-                />
+                <AddUserModal onClose={() => setShowAddUser(false)} onAdded={loadUsers} />
             )}
 
             {roleConfirm && (

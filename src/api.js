@@ -131,14 +131,12 @@ export function getDiscoverData() {
 }
 
 // ─── Reference data ───────────────────────────────────────────────────────────
-// Fetched on demand — when the modal opens or the filter panel opens.
-// Returns { data: [{ _id, name }] }
 
 export function getGenres() { return request("/reference-data/genres"); }
 export function getHouses() { return request("/reference-data/houses"); }
 export function getLanguages() { return request("/reference-data/languages"); }
 
-// ─── Admin ────────────────────────────────────────────────────────────────────
+// ─── Admin — users ────────────────────────────────────────────────────────────
 
 export function getAdminUsers() {
     return request("/admin/users");
@@ -164,6 +162,8 @@ export function revokePasswordReset(id) {
     return request(`/admin/users/${id}/revoke-reset`, { method: "POST" });
 }
 
+// ─── Admin — reference data CRUD ─────────────────────────────────────────────
+
 export function createReferenceItem(type, name) {
     return request(`/reference-data/${type}`, { method: "POST", body: JSON.stringify({ name }) });
 }
@@ -176,20 +176,7 @@ export function deleteReferenceItem(type, id) {
     return request(`/reference-data/${type}/${id}`, { method: "DELETE" });
 }
 
-// ─── Public (no auth) ────────────────────────────────────────────────────────
-// Plain fetch — no cookie, no auth header. Works for anyone with the link.
-
-export async function getPublicBooks(userId) {
-    const BASE_URL = import.meta.env.VITE_API_BASE
-        ? `${import.meta.env.VITE_API_BASE}`
-        : "/api";
-    const res = await fetch(`${BASE_URL}/public/${userId}`);
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.message);
-    return data;
-}
-
-// ─── CSV bulk upload ──────────────────────────────────────────────────────────
+// ─── Admin — book bulk import ─────────────────────────────────────────────────
 
 export function validateCSV(csvText) {
     return request("/admin/csv/validate", {
@@ -205,8 +192,7 @@ export function importCSV(csvText, stopOnError) {
     });
 }
 
-// Generates and triggers download of a sample CSV file.
-// Called entirely in the browser — no server request needed.
+// Generates and triggers a browser download of a sample books CSV.
 export function downloadSampleCSV() {
     const header = "title,author,house,genre,language,locationInHouse,description,makePublic";
     const rows = [
@@ -214,12 +200,65 @@ export function downloadSampleCSV() {
         '"Sapiens","Yuval Noah Harari","Marvel","Biography;Science","English","Shelf 3","A brief history of humankind.","false"',
         '"Cosmos","Carl Sagan","Brahma Courts","Science","English","","An exploration of the universe.",""',
     ];
-    const csv = [header, ...rows].join("\n");
+    triggerCSVDownload([header, ...rows].join("\n"), "sample_books.csv");
+}
+
+// ─── Admin — reference data CSV import ───────────────────────────────────────
+
+export function validateRefCSV(type, csv) {
+    return request("/admin/ref-csv/validate", {
+        method: "POST",
+        body: JSON.stringify({ type, csv }),
+    });
+}
+
+export function importRefCSV(type, csv) {
+    return request("/admin/ref-csv/import", {
+        method: "POST",
+        body: JSON.stringify({ type, csv }),
+    });
+}
+
+// Generates and triggers a browser download of a sample single-column CSV
+// for genres or languages. type is "genres" | "languages".
+export function downloadSampleRefCSV(type) {
+    const isGenres = type === "genres";
+    const names = isGenres
+        ? [
+            "Fiction", "Non-Fiction", "Mystery", "Thriller", "Fantasy",
+            "Science Fiction", "Romance", "Biography", "History", "Science",
+            "Self-Help", "Children's", "Young Adult", "Poetry", "Philosophy",
+            "Religion", "Business", "Travel", "Horror", "Graphic Novel",
+            "Short Stories", "Classic Literature", "Contemporary", "Literary Fiction",
+            "Crime", "Adventure",
+        ]
+        : [
+            "English", "Hindi", "Gujarati", "Marathi", "Tamil", "Telugu",
+            "Kannada", "Bengali", "Punjabi", "Malayalam", "Odia", "Urdu",
+            "French", "German", "Spanish", "Italian", "Portuguese", "Russian",
+            "Japanese", "Chinese", "Arabic",
+        ];
+    const csv = ["name", ...names].join("\n");
+    triggerCSVDownload(csv, `sample_${type}.csv`);
+}
+
+// ─── Public (no auth) ────────────────────────────────────────────────────────
+
+export async function getPublicBooks(userId) {
+    const res = await fetch(`${BASE_URL}/public/${userId}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message);
+    return data;
+}
+
+// ─── Shared helpers ───────────────────────────────────────────────────────────
+
+function triggerCSVDownload(csv, filename) {
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "sample_books.csv";
+    a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
 }
