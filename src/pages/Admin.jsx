@@ -21,6 +21,7 @@ import {
     validateRefCSV,
     importRefCSV,
     downloadSampleRefCSV,
+    exportRefCSV,
 } from "../api";
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
@@ -156,7 +157,7 @@ function AddUserModal({ onClose, onAdded }) {
 // type is "genres" | "languages".
 
 function RefCSVImportModal({ type, onClose, onImported }) {
-    const label = type === "genres" ? "Genres" : "Languages";
+    const label = type === "genres" ? "Genres" : type === "houses" ? "Houses" : "Languages";
     const [csvText, setCsvText] = useState("");
     const [fileName, setFileName] = useState("");
     const fileInputRef = useRef(null);
@@ -383,8 +384,7 @@ function RefErrorList({ errors }) {
 }
 
 // ─── Reference data section ───────────────────────────────────────────────────
-// Houses don't get a CSV import button (physical locations — no generic list).
-// Genres and Languages get an import button that opens RefCSVImportModal.
+// All three types (genres, houses, languages) support CSV import and export.
 
 function ReferenceSection({ title, type, color, items, loading, onAdd, onEdit, onDelete, onImported }) {
     const [newName, setNewName] = useState("");
@@ -392,8 +392,7 @@ function ReferenceSection({ title, type, color, items, loading, onAdd, onEdit, o
     const [editName, setEditName] = useState("");
     const [deleteTarget, setDeleteTarget] = useState(null);
     const [showImport, setShowImport] = useState(false);
-
-    const supportsImport = type === "genres" || type === "languages";
+    const [exporting, setExporting] = useState(false);
 
     const handleAdd = () => {
         if (!newName.trim()) return;
@@ -419,15 +418,31 @@ function ReferenceSection({ title, type, color, items, loading, onAdd, onEdit, o
             <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg">
                 {/* Section header */}
                 <div className="flex items-center justify-between mb-4 gap-2">
-                    <h3 className="text-base font-semibold text-gray-700 dark:text-gray-200">{title}</h3>
-                    {supportsImport && (
+                    <h3 className="text-base font-semibold text-gray-700 dark:text-gray-200 min-w-0 truncate">{title}</h3>
+                    <div className="flex gap-1.5 shrink-0">
                         <button
                             onClick={() => setShowImport(true)}
-                            className="shrink-0 px-3 py-1 text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition"
+                            className="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition whitespace-nowrap"
                         >
-                            ↑ Import CSV
+                            ↑ Import
                         </button>
-                    )}
+                        <button
+                            onClick={async () => {
+                                try {
+                                    setExporting(true);
+                                    await exportRefCSV(type);
+                                } catch (err) {
+                                    toast.error(err.message || "Export failed");
+                                } finally {
+                                    setExporting(false);
+                                }
+                            }}
+                            disabled={exporting || items.length === 0}
+                            className="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed transition whitespace-nowrap"
+                        >
+                            {exporting ? "Exporting…" : "↓ Export"}
+                        </button>
+                    </div>
                 </div>
 
                 {/* Pills */}

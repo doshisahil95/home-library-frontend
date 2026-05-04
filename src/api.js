@@ -222,24 +222,47 @@ export function importRefCSV(type, csv) {
 // Generates and triggers a browser download of a sample single-column CSV
 // for genres or languages. type is "genres" | "languages".
 export function downloadSampleRefCSV(type) {
-    const isGenres = type === "genres";
-    const names = isGenres
-        ? [
+    const samplesByType = {
+        genres: [
             "Fiction", "Non-Fiction", "Mystery", "Thriller", "Fantasy",
             "Science Fiction", "Romance", "Biography", "History", "Science",
             "Self-Help", "Children's", "Young Adult", "Poetry", "Philosophy",
             "Religion", "Business", "Travel", "Horror", "Graphic Novel",
             "Short Stories", "Classic Literature", "Contemporary", "Literary Fiction",
             "Crime", "Adventure",
-        ]
-        : [
+        ],
+        languages: [
             "English", "Hindi", "Gujarati", "Marathi", "Tamil", "Telugu",
             "Kannada", "Bengali", "Punjabi", "Malayalam", "Odia", "Urdu",
             "French", "German", "Spanish", "Italian", "Portuguese", "Russian",
             "Japanese", "Chinese", "Arabic",
-        ];
+        ],
+        houses: [
+            "Main House", "Guest House", "Study",
+        ],
+    };
+    const names = samplesByType[type] || [];
     const csv = ["name", ...names].join("\n");
     triggerCSVDownload(csv, `sample_${type}.csv`);
+}
+
+// Fetches the current list as a CSV and triggers a browser download.
+// Uses a fetch + blob approach since the endpoint returns CSV not JSON.
+export async function exportRefCSV(type) {
+    const res = await fetch(`${BASE_URL}/admin/ref-csv/export/${type}`, {
+        credentials: "include",
+    });
+    if (res.status === 401) {
+        localStorage.removeItem("user");
+        window.location.href = "/";
+        return;
+    }
+    if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.message || "Export failed");
+    }
+    const csv = await res.text();
+    triggerCSVDownload(csv, `${type}.csv`);
 }
 
 // ─── Public (no auth) ────────────────────────────────────────────────────────
