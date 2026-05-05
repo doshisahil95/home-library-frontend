@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Lock } from "lucide-react";
 import { STATUSES, STATUS_STYLES, STATUS_LABELS } from "../data/bookConstants";
-import { getGenres, getHouses, getLanguages, getSeries } from "../api";
+import { getGenres, getHouses, getLanguages, getSeries, upsertNote } from "../api";
 
 const VALID_TRANSITIONS = {
     null: ["want to read", "reading", "read"],
@@ -62,8 +62,13 @@ export default function BookModal({
     const [genres, setGenres] = useState([]);
     const [languages, setLanguages] = useState([]);
     const [seriesList, setSeriesList] = useState([]);
+    const [noteText, setNoteText] = useState(formData.note || "");
+    const [noteSaving, setNoteSaving] = useState(false);
+    const [noteSaved, setNoteSaved] = useState(false);
     const [refLoading, setRefLoading] = useState(true);
     const [refError, setRefError] = useState("");
+
+    useEffect(() => { setNoteText(formData.note || ""); }, [formData.note]);
 
     useEffect(() => {
         let cancelled = false;
@@ -328,33 +333,92 @@ export default function BookModal({
                                     </div>
                                 )}
 
+                                {/* My Note — edit mode only, private */}
+                                {isEditing && bookId && (
+                                    <div>
+                                        <SectionLabel>My Note</SectionLabel>
+                                        <textarea
+                                            placeholder="Your personal thoughts on this book..."
+                                            value={noteText}
+                                            onChange={(e) => {
+                                                if (e.target.value.length <= 1000) {
+                                                    setNoteText(e.target.value);
+                                                    setNoteSaved(false);
+                                                }
+                                            }}
+                                            rows={3}
+                                            className="w-full px-3 py-2 rounded-lg border dark:bg-gray-700 dark:text-white resize-none text-sm"
+                                        />
+                                        <div className="flex items-center justify-between mt-1">
+                                            <p className="text-xs text-gray-400">{noteText.length} / 1000 · private to you</p>
+                                            <button
+                                                type="button"
+                                                disabled={noteSaving}
+                                                onClick={async () => {
+                                                    try {
+                                                        setNoteSaving(true);
+                                                        await upsertNote(bookId, noteText);
+                                                        setNoteSaved(true);
+                                                        setTimeout(() => setNoteSaved(false), 2000);
+                                                    } catch {
+                                                        // silent — toast handled in api wrapper
+                                                    } finally {
+                                                        setNoteSaving(false);
+                                                    }
+                                                }}
+                                                className="text-xs text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-50"
+                                            >
+                                                {noteSaving ? "Saving..." : noteSaved ? "Saved ✓" : "Save note"}
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
                                 {/* Series — edit mode only */}
                                 {isEditing && bookId && (
                                     <div>
                                         <SectionLabel>Series</SectionLabel>
-                                        {refLoading ? <PillSkeleton count={2} /> : (
-                                            <div className="flex gap-2">
-                                                <select value={formData.seriesId || ""}
-                                                    onChange={(e) => setFormData({ ...formData, seriesId: e.target.value || null })}
-                                                    className="flex-1 px-3 py-2 rounded-lg border dark:bg-gray-700 dark:text-white text-sm">
-                                                    <option value="">No series</option>
-                                                    {seriesList.map((s) => (
-                                                        <option key={s._id} value={s._id}>{s.name}</option>
-                                                    ))}
-                                                </select>
-                                                {isAdmin && formData.seriesId && (
-                                                    <input type="number" placeholder="#" min={1} max={9999}
-                                                        value={formData.seriesOrder || ""}
-                                                        onChange={(e) => setFormData({ ...formData, seriesOrder: e.target.value ? Number(e.target.value) : null })}
-                                                        className="w-16 px-3 py-2 rounded-lg border dark:bg-gray-700 dark:text-white text-sm"
-                                                        title="Book number in series" />
+                                        {refLoading ? <PillSkeleton count={2} /> : isAdmin ? (
+                                            // Admins can assign series and set order
+                                            <>
+                                                <div className="flex gap-2">
+                                                    <select value={formData.seriesId || ""}
+                                                        onChange={(e) => setFormData({ ...formData, seriesId: e.target.value || null })}
+                                                        className="flex-1 px-3 py-2 rounded-lg border dark:bg-gray-700 dark:text-white text-sm">
+                                                        <option value="">No series</option>
+                                                        {seriesList.map((s) => (
+                                                            <option key={s._id} value={s._id}>{s.name}</option>
+                                                        ))}
+                                                    </select>
+                                                    {formData.seriesId && (
+                                                        <input type="number" placeholder="#" min={1} max={9999}
+                                                            value={formData.seriesOrder || ""}
+                                                            onChange={(e) => setFormData({ ...formData, seriesOrder: e.target.value ? Number(e.target.value) : null })}
+                                                            className="w-16 px-3 py-2 rounded-lg border dark:bg-gray-700 dark:text-white text-sm"
+                                                            title="Book number in series" />
+                                                    )}
+                                                </div>
+                                                {formData.seriesId && (
+                                                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                                                        # sets the book's position in the series.
+                                                    </p>
                                                 )}
-                                            </div>
-                                        )}
-                                        {isAdmin && formData.seriesId && (
-                                            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                                                # sets the book's position in the series.
-                                            </p>
+                                            </>
+                                        ) : (
+                                            // Non-admins see series info as read-only
+                                            formData.seriesId ? (
+                                                <div className="px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600">
+                                                    <p className="text-sm text-gray-700 dark:text-gray-300">
+                                                        {seriesList.find((s) => s._id === formData.seriesId)?.name || "Series"}
+                                                        {formData.seriesOrder && (
+                                                            <span className="ml-2 text-xs text-gray-400 dark:text-gray-500">· #{formData.seriesOrder}</span>
+                                                        )}
+                                                    </p>
+                                                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Series is managed by an admin.</p>
+                                                </div>
+                                            ) : (
+                                                <p className="text-xs text-gray-400 dark:text-gray-500 italic">Not part of a series.</p>
+                                            )
                                         )}
                                     </div>
                                 )}

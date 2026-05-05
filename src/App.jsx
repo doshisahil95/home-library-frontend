@@ -6,6 +6,8 @@ import Dashboard from "./pages/Dashboard";
 import Discover from "./pages/Discover";
 import Books from "./pages/Books";
 import Admin from "./pages/Admin";
+import Settings from "./pages/Settings";
+import Wishlist from "./pages/Wishlist";
 import PublicBooks from "./pages/PublicBooks";
 import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -20,10 +22,7 @@ function App() {
               t.type === "error" ? "#991b1b" :
                 "#1f2937";
           return (
-            <ToastBar
-              toast={t}
-              style={{ background: bg, color: "#fff", padding: 0 }}
-            >
+            <ToastBar toast={t} style={{ background: bg, color: "#fff", padding: 0 }}>
               {({ icon, message }) => (
                 <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 12px", background: bg, color: "#fff", borderRadius: "8px", width: "100%" }}>
                   {icon}
@@ -42,30 +41,19 @@ function App() {
       </Toaster>
 
       <Routes>
-        {/* Public */}
         <Route path="/" element={<Login />} />
 
-        {/* Protected — Layout wraps all authenticated pages */}
-        <Route
-          element={
-            <ProtectedRoute>
-              <Layout />
-            </ProtectedRoute>
-          }
-        >
+        <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/discover" element={<Discover />} />
           <Route path="/books" element={<Books />} />
+          <Route path="/wishlist" element={<Wishlist />} />
+          <Route path="/settings" element={<Settings />} />
           <Route path="/admin" element={<Admin />} />
-
-          {/* Any unknown protected path falls back to dashboard */}
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>
 
-        {/* Public book sharing page — no auth required */}
         <Route path="/public/:userId" element={<PublicBooks />} />
-
-        {/* Any unknown public path falls back to login */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

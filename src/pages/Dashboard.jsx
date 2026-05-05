@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { getDashboardStats } from "../api";
+import { getDashboardStats, getReadingGoal } from "../api";
 
 function StatCard({ title, value, color }) {
   return (
@@ -47,10 +47,56 @@ function SkeletonBlock() {
   );
 }
 
+// ─── Reading Goal Widget ──────────────────────────────────────────────────────
+
+function ReadingGoalWidget() {
+  const [goalData, setGoalData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getReadingGoal()
+      .then((res) => setGoalData(res.data))
+      .catch(() => { })
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <SkeletonCard />;
+  if (!goalData?.goal) return null; // no goal set — don't show widget
+
+  const { goal, booksReadThisYear } = goalData;
+  const pct = Math.min(100, Math.round((booksReadThisYear / goal.target) * 100));
+  const done = booksReadThisYear >= goal.target;
+
+  return (
+    <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200">
+          {goal.year} Reading Goal
+        </h2>
+        <span className={`text-sm font-semibold ${done ? "text-green-600 dark:text-green-400" : "text-gray-500 dark:text-gray-400"}`}>
+          {done ? "Goal reached! 🎉" : `${booksReadThisYear} / ${goal.target}`}
+        </span>
+      </div>
+      <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-3 overflow-hidden mb-2">
+        <div
+          className={`h-3 rounded-full transition-all duration-700 ${done ? "bg-green-500" : "bg-blue-500"}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <p className="text-xs text-gray-400 dark:text-gray-500">
+        {done
+          ? `You've read ${booksReadThisYear} books this year — goal of ${goal.target} achieved.`
+          : `${goal.target - booksReadThisYear} more ${goal.target - booksReadThisYear === 1 ? "book" : "books"} to reach your goal.`}
+      </p>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
   useEffect(() => {
     getDashboardStats()
       .then((res) => setStats(res.data))
@@ -63,6 +109,9 @@ export default function Dashboard() {
       <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100 mt-4">Dashboard</h1>
 
       {error && <div className="text-red-500">{error}</div>}
+
+      {/* Reading Goal — only shown if a goal is set */}
+      <ReadingGoalWidget />
 
       {/* Row 1: Stat cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -79,7 +128,6 @@ export default function Dashboard() {
 
       {/* Row 2: House + Genre */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
         {loading ? <SkeletonBlock /> : (
           <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg">
             <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200 mb-4">Books by House</h2>
@@ -92,7 +140,6 @@ export default function Dashboard() {
             ) : <p className="text-gray-400 text-sm">No data yet</p>}
           </div>
         )}
-
         {loading ? <SkeletonBlock /> : (
           <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg">
             <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200 mb-4">Books by Genre</h2>
@@ -107,15 +154,13 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Row 3: Recently Added — full width now that My Reading moved to Discover */}
+      {/* Row 3: Recently Added */}
       <div className="grid grid-cols-1 gap-6">
-
         {loading ? <SkeletonBlock /> : (
           <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg">
             <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200 mb-4">Recently Added</h2>
             {stats?.recentBooks?.length > 0 ? (
               <>
-                {/* Desktop — table */}
                 <table className="hidden md:table min-w-full text-left">
                   <thead>
                     <tr className="text-sm text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
@@ -132,25 +177,19 @@ export default function Dashboard() {
                         <td className="py-3 text-gray-600 dark:text-gray-300 truncate">{book.author}</td>
                         <td className="py-3 text-gray-600 dark:text-gray-300 truncate">{book.house}</td>
                         <td className="py-3 text-gray-400 dark:text-gray-500 text-right whitespace-nowrap">
-                          {new Date(book.createdAt).toLocaleDateString(undefined, {
-                            day: "numeric", month: "short", year: "numeric"
-                          })}
+                          {new Date(book.createdAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-
-                {/* Mobile — stacked rows */}
                 <div className="md:hidden divide-y divide-gray-100 dark:divide-gray-700">
                   {stats.recentBooks.map((book) => (
                     <div key={book._id} className="py-3 space-y-0.5">
                       <p className="text-sm font-medium text-gray-800 dark:text-gray-100 truncate">{book.title}</p>
                       <p className="text-xs text-gray-500 dark:text-gray-400">{book.author} · {book.house}</p>
                       <p className="text-xs text-gray-400 dark:text-gray-500">
-                        {new Date(book.createdAt).toLocaleDateString(undefined, {
-                          day: "numeric", month: "short", year: "numeric"
-                        })}
+                        {new Date(book.createdAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}
                       </p>
                     </div>
                   ))}

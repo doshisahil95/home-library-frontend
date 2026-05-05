@@ -317,3 +317,37 @@ export function assignBookToSeries(bookId, seriesId, order) {
 export function removeBookFromSeries(bookId) {
     return request(`/books/${bookId}/series`, { method: "DELETE" });
 }
+
+// ─── Reading goal ─────────────────────────────────────────────────────────────
+
+export function getReadingGoal() {
+    return request("/users/reading-goal");
+}
+
+export function setReadingGoal(target) {
+    return request("/users/reading-goal", { method: "PUT", body: JSON.stringify({ target }) });
+}
+
+// ─── Book notes ───────────────────────────────────────────────────────────────
+
+export function upsertNote(bookId, text) {
+    return request(`/books/${bookId}/note`, { method: "PUT", body: JSON.stringify({ text }) });
+}
+
+// ─── Wishlist ─────────────────────────────────────────────────────────────────
+
+export function getWishlist() {
+    return request("/wishlist");
+}
+
+export function addWishlistItem(item) {
+    return request("/wishlist", { method: "POST", body: JSON.stringify(item) });
+}
+
+export function updateWishlistItem(itemId, item) {
+    return request(`/wishlist/${itemId}`, { method: "PUT", body: JSON.stringify(item) });
+}
+
+export function deleteWishlistItem(itemId) {
+    return request(`/wishlist/${itemId}`, { method: "DELETE" });
+}

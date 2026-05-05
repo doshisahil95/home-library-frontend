@@ -21,7 +21,7 @@ const EMPTY_FORM = {
   title: "", author: "", house: "", genre: [], language: "", locationInHouse: "",
   description: "", userStatus: null, isPublic: false, startedAt: null, startedAtLocked: false,
   finishedAt: null, finishedAtLocked: false, rating: null,
-  seriesId: null, seriesOrder: null,
+  seriesId: null, seriesOrder: null, note: "",
 };
 
 function SortIcon({ field, sortBy, sortOrder, disabled }) {
@@ -369,6 +369,7 @@ export default function Books() {
       rating: book.rating ?? null,
       seriesId: book.series?.id?.toString() || null,
       seriesOrder: book.series?.order || null,
+      note: (book.notes || []).find((n) => n.userId?.toString() === currentUserId)?.text || "",
     });
     setCurrentId(book._id);
     setCurrentStatus(book.userStatus || null);
