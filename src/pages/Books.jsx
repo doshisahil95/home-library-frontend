@@ -13,12 +13,15 @@ import {
   getGenres,
   getHouses,
   getLanguages,
+  assignBookToSeries,
+  removeBookFromSeries,
 } from "../api";
 
 const EMPTY_FORM = {
   title: "", author: "", house: "", genre: [], language: "", locationInHouse: "",
   description: "", userStatus: null, isPublic: false, startedAt: null, startedAtLocked: false,
   finishedAt: null, finishedAtLocked: false, rating: null,
+  seriesId: null, seriesOrder: null,
 };
 
 function SortIcon({ field, sortBy, sortOrder, disabled }) {
@@ -328,6 +331,12 @@ export default function Books() {
       };
       if (isEditing) {
         await updateBook(currentId, payload);
+        // Handle series assignment — separate endpoint
+        if (formData.seriesId) {
+          await assignBookToSeries(currentId, formData.seriesId, formData.seriesOrder || undefined);
+        } else {
+          try { await removeBookFromSeries(currentId); } catch { /* not in series */ }
+        }
         toast.success("Book updated");
       } else {
         await addBook(payload);
@@ -358,6 +367,8 @@ export default function Books() {
       finishedAt: book.finishedAt || null,
       finishedAtLocked: book.finishedAtLocked || false,
       rating: book.rating ?? null,
+      seriesId: book.series?.id?.toString() || null,
+      seriesOrder: book.series?.order || null,
     });
     setCurrentId(book._id);
     setCurrentStatus(book.userStatus || null);
@@ -407,9 +418,12 @@ export default function Books() {
 
   const skeletonRows = Math.min(limit, 25);
 
-  // Current user ID for building public link in expanded row
+  // Current user ID and role for building public link and enabling admin features
   const currentUserId = (() => {
     try { return JSON.parse(localStorage.getItem("user"))?.id || ""; } catch { return ""; }
+  })();
+  const isAdmin = (() => {
+    try { const u = JSON.parse(localStorage.getItem("user")); return u?.role === "admin" || u?.role === "superadmin"; } catch { return false; }
   })();
 
   // ─── Inline public link ───────────────────────────────────────────────────
@@ -440,6 +454,14 @@ export default function Books() {
   function ExpandedDetail({ book, userId }) {
     return (
       <div className="space-y-3">
+        {book.series && (
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-semibold text-gray-400 dark:text-gray-500">Series:</span>
+            <span className="px-2 py-0.5 text-xs bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 rounded-full">
+              {book.series.order ? `#${book.series.order} · ` : ""}{book.series.name}
+            </span>
+          </div>
+        )}
         {book.genre?.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-xs font-semibold text-gray-400 dark:text-gray-500 mr-1">Genres:</span>
@@ -952,6 +974,9 @@ export default function Books() {
           onSubmit={handleSubmit}
           onClose={closeModal}
           currentStatus={currentStatus}
+          userId={currentUserId}
+          bookId={currentId}
+          isAdmin={isAdmin}
         />
       )}
 

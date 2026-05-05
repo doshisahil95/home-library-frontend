@@ -22,6 +22,10 @@ import {
     importRefCSV,
     downloadSampleRefCSV,
     exportRefCSV,
+    getSeries,
+    createSeries,
+    updateSeries,
+    deleteSeries,
 } from "../api";
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
@@ -532,6 +536,191 @@ function ReferenceSection({ title, type, color, items, loading, onAdd, onEdit, o
 }
 
 
+
+// ─── Series Tab ───────────────────────────────────────────────────────────────
+// Admin+ only. Create, edit, delete series. Books are linked from the Books page.
+
+function SeriesTab({ series, loading, onRefresh }) {
+    const [showAdd, setShowAdd] = useState(false);
+    const [editTarget, setEditTarget] = useState(null);    // series object being edited
+    const [deleteTarget, setDeleteTarget] = useState(null); // series object to confirm delete
+    const [form, setForm] = useState({ name: "", description: "" });
+    const [formError, setFormError] = useState("");
+    const [saving, setSaving] = useState(false);
+
+    const openAdd = () => {
+        setForm({ name: "", description: "" });
+        setFormError("");
+        setShowAdd(true);
+        setEditTarget(null);
+    };
+
+    const openEdit = (s) => {
+        setForm({ name: s.name, description: s.description || "" });
+        setFormError("");
+        setEditTarget(s);
+        setShowAdd(true);
+    };
+
+    const handleSave = async () => {
+        if (!form.name.trim()) { setFormError("Series name is required"); return; }
+        try {
+            setSaving(true);
+            setFormError("");
+            if (editTarget) {
+                await updateSeries(editTarget._id, form);
+                toast.success("Series updated");
+            } else {
+                await createSeries(form);
+                toast.success(`Series "${form.name}" created`);
+            }
+            setShowAdd(false);
+            onRefresh();
+        } catch (err) {
+            setFormError(err.message || "Failed to save");
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleDelete = async (s) => {
+        try {
+            await deleteSeries(s._id);
+            toast.success(`"${s.name}" deleted — all linked books have been unlinked`);
+            onRefresh();
+        } catch (err) {
+            toast.error(err.message || "Failed to delete");
+        }
+    };
+
+    return (
+        <div className="space-y-4">
+            <div className="flex justify-end">
+                <button
+                    onClick={openAdd}
+                    className="shrink-0 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                >
+                    + New Series
+                </button>
+            </div>
+
+            {/* Add / Edit form */}
+            {showAdd && (
+                <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-lg border border-gray-200 dark:border-gray-700 space-y-3">
+                    <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">
+                        {editTarget ? `Edit "${editTarget.name}"` : "New Series"}
+                    </h3>
+                    {formError && <p className="text-sm text-red-500">{formError}</p>}
+                    <input
+                        autoFocus
+                        type="text"
+                        placeholder="Series name"
+                        value={form.name}
+                        onChange={(e) => setForm({ ...form, name: e.target.value })}
+                        maxLength={200}
+                        className="w-full px-3 py-2 rounded-lg border dark:bg-gray-700 dark:text-white text-sm"
+                    />
+                    <textarea
+                        placeholder="Description (optional)"
+                        value={form.description}
+                        onChange={(e) => setForm({ ...form, description: e.target.value })}
+                        rows={2}
+                        maxLength={1000}
+                        className="w-full px-3 py-2 rounded-lg border dark:bg-gray-700 dark:text-white text-sm resize-none"
+                    />
+                    <div className="flex gap-2 justify-end">
+                        <button
+                            onClick={() => setShowAdd(false)}
+                            className="px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 text-sm"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleSave}
+                            disabled={saving}
+                            className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700 disabled:opacity-50"
+                        >
+                            {saving ? "Saving..." : editTarget ? "Update" : "Create"}
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Series list */}
+            {loading ? (
+                <div className="space-y-3">
+                    {[...Array(3)].map((_, i) => (
+                        <div key={i} className="h-16 rounded-2xl bg-gray-200 dark:bg-gray-700 animate-pulse" />
+                    ))}
+                </div>
+            ) : series.length === 0 ? (
+                <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 text-center shadow-lg">
+                    <p className="text-gray-400 dark:text-gray-500 text-sm">No series yet. Create one to get started.</p>
+                </div>
+            ) : (
+                <div className="space-y-3">
+                    {series.map((s) => (
+                        <div key={s._id} className="bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-lg">
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <h3 className="font-semibold text-gray-800 dark:text-gray-100">{s.name}</h3>
+                                        <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300">
+                                            {s.totalCount} {s.totalCount === 1 ? "book" : "books"}
+                                        </span>
+                                    </div>
+                                    {s.description && (
+                                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 truncate">{s.description}</p>
+                                    )}
+                                    {s.books.length > 0 && (
+                                        <div className="flex flex-wrap gap-1 mt-2">
+                                            {s.books.slice(0, 5).map((b) => (
+                                                <span key={b._id} className="text-xs px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-full">
+                                                    {b.order ? `${b.order}. ` : ""}{b.title}
+                                                </span>
+                                            ))}
+                                            {s.books.length > 5 && (
+                                                <span className="text-xs text-gray-400 dark:text-gray-500 self-center">
+                                                    +{s.books.length - 5} more
+                                                </span>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="flex gap-2 shrink-0">
+                                    <button
+                                        onClick={() => openEdit(s)}
+                                        className="px-3 py-1 text-xs bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500"
+                                    >
+                                        Edit
+                                    </button>
+                                    <button
+                                        onClick={() => setDeleteTarget(s)}
+                                        className="px-3 py-1 text-xs bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-lg hover:bg-red-200 dark:hover:bg-red-800"
+                                    >
+                                        Delete
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {deleteTarget && (
+                <ConfirmModal
+                    title="Delete Series"
+                    message={`Delete "${deleteTarget.name}"? This cannot be undone. ${deleteTarget.totalCount > 0 ? `${deleteTarget.totalCount} book${deleteTarget.totalCount === 1 ? "" : "s"} will be unlinked from this series.` : ""}`}
+                    confirmLabel="Delete"
+                    confirmClass="bg-red-600 hover:bg-red-700"
+                    onConfirm={() => handleDelete(deleteTarget)}
+                    onClose={() => setDeleteTarget(null)}
+                />
+            )}
+        </div>
+    );
+}
+
 // ─── CSV Import Tab (book import) ─────────────────────────────────────────────
 
 function CSVImportTab() {
@@ -759,8 +948,6 @@ function BookErrorList({ errors }) {
     );
 }
 
-// ─── Main Admin page ──────────────────────────────────────────────────────────
-
 export default function Admin() {
     const navigate = useNavigate();
     const currentUser = (() => {
@@ -781,6 +968,9 @@ export default function Admin() {
     const [houses, setHouses] = useState([]);
     const [languages, setLanguages] = useState([]);
     const [refLoading, setRefLoading] = useState(true);
+
+    const [seriesList, setSeriesList] = useState([]);
+    const [seriesLoading, setSeriesLoading] = useState(false);
 
     useEffect(() => {
         try {
@@ -817,9 +1007,22 @@ export default function Admin() {
         }
     }, []);
 
+    const loadSeriesData = useCallback(async () => {
+        try {
+            setSeriesLoading(true);
+            const res = await getSeries();
+            setSeriesList(res.data);
+        } catch (err) {
+            toast.error(err.message || "Failed to load series");
+        } finally {
+            setSeriesLoading(false);
+        }
+    }, []);
+
     useEffect(() => {
         if (isSuperAdmin) loadUsers();
         loadRefData();
+        loadSeriesData();
     }, []);
 
     const handleChangeRole = (user) => {
@@ -1090,33 +1293,52 @@ export default function Admin() {
 
             {/* ── Reference Data tab ─────────────────────────────────────────────── */}
             {activeTab === "refdata" && (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <ReferenceSection
-                        title="Genres" type="genres" color="blue"
-                        items={genres} loading={refLoading}
-                        onAdd={(name) => handleRefAdd("genres", name)}
-                        onEdit={(id, name) => handleRefEdit("genres", id, name)}
-                        onDelete={(id, name) => handleRefDelete("genres", id, name)}
-                        onImported={loadRefData}
-                    />
-                    <ReferenceSection
-                        title="Houses" type="houses" color="green"
-                        items={houses} loading={refLoading}
-                        onAdd={(name) => handleRefAdd("houses", name)}
-                        onEdit={(id, name) => handleRefEdit("houses", id, name)}
-                        onDelete={(id, name) => handleRefDelete("houses", id, name)}
-                        onImported={loadRefData}
-                    />
-                    <ReferenceSection
-                        title="Languages" type="languages" color="purple"
-                        items={languages} loading={refLoading}
-                        onAdd={(name) => handleRefAdd("languages", name)}
-                        onEdit={(id, name) => handleRefEdit("languages", id, name)}
-                        onDelete={(id, name) => handleRefDelete("languages", id, name)}
-                        onImported={loadRefData}
-                    />
+                <div className="space-y-8">
+                    {/* Genres / Houses / Languages */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <ReferenceSection
+                            title="Genres" type="genres" color="blue"
+                            items={genres} loading={refLoading}
+                            onAdd={(name) => handleRefAdd("genres", name)}
+                            onEdit={(id, name) => handleRefEdit("genres", id, name)}
+                            onDelete={(id, name) => handleRefDelete("genres", id, name)}
+                            onImported={loadRefData}
+                        />
+                        <ReferenceSection
+                            title="Houses" type="houses" color="green"
+                            items={houses} loading={refLoading}
+                            onAdd={(name) => handleRefAdd("houses", name)}
+                            onEdit={(id, name) => handleRefEdit("houses", id, name)}
+                            onDelete={(id, name) => handleRefDelete("houses", id, name)}
+                            onImported={loadRefData}
+                        />
+                        <ReferenceSection
+                            title="Languages" type="languages" color="purple"
+                            items={languages} loading={refLoading}
+                            onAdd={(name) => handleRefAdd("languages", name)}
+                            onEdit={(id, name) => handleRefEdit("languages", id, name)}
+                            onDelete={(id, name) => handleRefDelete("languages", id, name)}
+                            onImported={loadRefData}
+                        />
+                    </div>
+
+                    {/* Series — full-width section below */}
+                    <div>
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="flex-1 border-t border-gray-200 dark:border-gray-700" />
+                            <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">Series</span>
+                            <div className="flex-1 border-t border-gray-200 dark:border-gray-700" />
+                        </div>
+                        <SeriesTab
+                            series={seriesList}
+                            loading={seriesLoading}
+                            onRefresh={loadSeriesData}
+                        />
+                    </div>
                 </div>
             )}
+
+
 
             {/* ── Bulk Import tab ────────────────────────────────────────────────── */}
             {activeTab === "csv" && <CSVImportTab />}

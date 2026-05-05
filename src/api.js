@@ -194,11 +194,11 @@ export function importCSV(csvText, stopOnError) {
 
 // Generates and triggers a browser download of a sample books CSV.
 export function downloadSampleCSV() {
-    const header = "title,author,house,genre,language,locationInHouse,description,makePublic";
+    const header = "title,author,house,genre,language,locationInHouse,description,makePublic,series,seriesOrder";
     const rows = [
-        '"The Alchemist","Paulo Coelho","Brahma Courts","Fiction;Fantasy","English","Shelf 1 Row 2","A journey of self-discovery.","true"',
-        '"Sapiens","Yuval Noah Harari","Marvel","Biography;Science","English","Shelf 3","A brief history of humankind.","false"',
-        '"Cosmos","Carl Sagan","Brahma Courts","Science","English","","An exploration of the universe.",""',
+        '"The Philosopher\'s Stone","J.K.Rowling","Brahma Courts","Fiction;Fantasy","English","Shelf 1 Row 1","The first book.","false","Harry Potter",1',
+        '"The Chamber of Secrets","J.K. Rowling","Brahma Courts","Fiction;Fantasy","English","Shelf 1 Row 2","The second book.","false","Harry Potter",2',
+        '"Sapiens","Yuval Noah Harari","Marvel","Biography;Science","English","Shelf 3","A brief history of humankind.","false","",""',
     ];
     triggerCSVDownload([header, ...rows].join("\n"), "sample_books.csv");
 }
@@ -284,4 +284,36 @@ function triggerCSVDownload(csv, filename) {
     a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
+}
+
+// ─── Series ───────────────────────────────────────────────────────────────────
+
+
+export function getSeries() {
+    return request("/series");
+}
+
+export function createSeries(data) {
+    return request("/series", { method: "POST", body: JSON.stringify(data) });
+}
+
+export function updateSeries(id, data) {
+    return request(`/series/${id}`, { method: "PUT", body: JSON.stringify(data) });
+}
+
+export function deleteSeries(id) {
+    return request(`/series/${id}`, { method: "DELETE" });
+}
+
+// Assign a book to a series. seriesId and optional order (admin only).
+export function assignBookToSeries(bookId, seriesId, order) {
+    return request(`/books/${bookId}/series`, {
+        method: "POST",
+        body: JSON.stringify({ seriesId, ...(order !== undefined && order !== null ? { order } : {}) }),
+    });
+}
+
+// Remove a book from its current series.
+export function removeBookFromSeries(bookId) {
+    return request(`/books/${bookId}/series`, { method: "DELETE" });
 }
