@@ -30,7 +30,6 @@ function SortIcon({ field, sortBy, sortOrder, disabled }) {
 }
 
 function buildPageNumbers(currentPage, totalPages) {
-  // Always returns exactly 7 slots so the bar never resizes.
   if (totalPages <= 7) {
     return Array.from({ length: totalPages }, (_, i) => i + 1);
   }
@@ -38,14 +37,11 @@ function buildPageNumbers(currentPage, totalPages) {
   slots[0] = 1;
   slots[6] = totalPages;
   if (currentPage <= 3) {
-    // Near start: 1 2 3 4 5 ... last
     slots[1] = 2; slots[2] = 3; slots[3] = 4; slots[4] = 5; slots[5] = "...";
   } else if (currentPage >= totalPages - 2) {
-    // Near end: 1 ... last-4 last-3 last-2 last-1 last
     slots[1] = "..."; slots[2] = totalPages - 4; slots[3] = totalPages - 3;
     slots[4] = totalPages - 2; slots[5] = totalPages - 1;
   } else {
-    // Middle: 1 ... p-1 p p+1 ... last
     slots[1] = "..."; slots[2] = currentPage - 1; slots[3] = currentPage;
     slots[4] = currentPage + 1; slots[5] = "...";
   }
@@ -70,9 +66,6 @@ function StarDisplay({ rating }) {
   );
 }
 
-// ─── Filter panel skeleton ────────────────────────────────────────────────────
-// Shown in the House, Genre and Language columns while reference data loads.
-
 function FilterPillSkeleton({ count = 3 }) {
   return (
     <div className="flex flex-wrap gap-1.5">
@@ -94,7 +87,6 @@ export default function Books() {
   const [error, setError] = useState("");
   const [modalError, setModalError] = useState("");
 
-  // Search & filters
   const [search, setSearch] = useState("");
   const [filterHouse, setFilterHouse] = useState("");
   const [filterGenres, setFilterGenres] = useState([]);
@@ -102,29 +94,24 @@ export default function Books() {
   const [filterStatus, setFilterStatus] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
 
-  // Reference data for filter panel — fetched when panel opens
   const [filterHouses, setFilterHouses] = useState([]);
   const [filterGenreOptions, setFilterGenreOptions] = useState([]);
   const [filterLanguageOptions, setFilterLanguageOptions] = useState([]);
   const [refLoading, setRefLoading] = useState(false);
-  const refLoaded = useRef(false); // only fetch once per session open
+  const refLoaded = useRef(false);
 
-  // Sort
   const [sortBy, setSortBy] = useState(null);
   const [sortOrder, setSortOrder] = useState("asc");
 
-  // Browse pagination
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalBooks, setTotalBooks] = useState(0);
 
-  // Search cursor pagination
   const [searchCursor, setSearchCursor] = useState(null);
   const [searchPrevCursors, setSearchPrevCursors] = useState([]);
 
   const [expandedId, setExpandedId] = useState(null);
 
-  // Modals
   const [showModal, setShowModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -151,10 +138,6 @@ export default function Books() {
 
   const activeFilterCount = [filterHouse, filterLanguage, filterStatus].filter(Boolean).length + filterGenres.length;
 
-  // ─── Fetch reference data for filter panel ────────────────────────────────
-  // Only fetches once per filter panel open session — refLoaded ref prevents
-  // re-fetching on collapse/expand within the same page visit.
-
   const loadFilterRefData = useCallback(async () => {
     if (refLoaded.current) return;
     setRefLoading(true);
@@ -176,8 +159,6 @@ export default function Books() {
     setFiltersOpen(opening);
     if (opening) loadFilterRefData();
   };
-
-  // ─── Fetch Books ──────────────────────────────────────────────────────────
 
   const fetchBooks = useCallback(async (
     page = 1, showLoader = true, customLimit = null,
@@ -208,8 +189,6 @@ export default function Books() {
       initialLoad.current = false;
     }
   }, [limit]);
-
-  // ─── Fetch Search Results ─────────────────────────────────────────────────
 
   const fetchSearch = useCallback(async (
     query, filters, cursor = null, direction = "next", customLimit = null
@@ -243,8 +222,6 @@ export default function Books() {
     }
   }, [limit]);
 
-  // ─── Refresh after mutation ───────────────────────────────────────────────
-
   const refreshBooks = useCallback(() => {
     if (search.trim()) return fetchSearch(search, activeFilters);
     return fetchBooks(1, false, null, sortBy, sortOrder, activeFilters);
@@ -256,13 +233,10 @@ export default function Books() {
     fetchBooks(1, true, null, null, "asc", { house: "", genres: [], language: "", status: "" });
   }, []);
 
-  // ─── Debounced trigger ────────────────────────────────────────────────────
-
   useEffect(() => {
     if (initialLoad.current) return;
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
     debounceTimer.current = setTimeout(() => {
-      // Clear no-status filter if switching to search mode — incompatible combination
       const effectiveStatus = (search.trim() && filterStatus === "no-status") ? "" : filterStatus;
       if (effectiveStatus !== filterStatus) setFilterStatus("");
       const filters = { house: filterHouse, genres: filterGenres, language: filterLanguage, status: effectiveStatus };
@@ -278,8 +252,6 @@ export default function Books() {
     return () => clearTimeout(debounceTimer.current);
   }, [search, filterHouse, filterGenres, filterLanguage, filterStatus]);
 
-  // ─── Sort ─────────────────────────────────────────────────────────────────
-
   const handleSort = (field) => {
     if (isAtlasSearch) return;
     const newOrder = sortBy === field && sortOrder === "asc" ? "desc" : "asc";
@@ -288,16 +260,12 @@ export default function Books() {
     fetchBooks(1, false, null, field, newOrder, activeFilters);
   };
 
-  // ─── Page Change ──────────────────────────────────────────────────────────
-
   const goToPage = (page) => {
     if (page < 1 || page > totalPages || page === currentPage) return;
     setIsPaging(true);
     setExpandedId(null);
     fetchBooks(page, false, null, sortBy, sortOrder, activeFilters);
   };
-
-  // ─── Reset ────────────────────────────────────────────────────────────────
 
   const handleReset = () => {
     setSearch("");
@@ -311,8 +279,6 @@ export default function Books() {
   const isResetDisabled = search === "" && !filterHouse && filterGenres.length === 0 && !filterLanguage && !filterStatus;
 
   const toggleExpand = (id) => setExpandedId((prev) => (prev === id ? null : id));
-
-  // ─── Form Handlers ────────────────────────────────────────────────────────
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -331,7 +297,6 @@ export default function Books() {
       };
       if (isEditing) {
         await updateBook(currentId, payload);
-        // Handle series assignment — separate endpoint
         if (formData.seriesId) {
           await assignBookToSeries(currentId, formData.seriesId, formData.seriesOrder || undefined);
         } else {
@@ -419,7 +384,6 @@ export default function Books() {
 
   const skeletonRows = Math.min(limit, 25);
 
-  // Current user ID and role for building public link and enabling admin features
   const currentUserId = (() => {
     try { return JSON.parse(localStorage.getItem("user"))?.id || ""; } catch { return ""; }
   })();
@@ -427,7 +391,6 @@ export default function Books() {
     try { const u = JSON.parse(localStorage.getItem("user")); return u?.role === "admin" || u?.role === "superadmin"; } catch { return false; }
   })();
 
-  // ─── Inline public link ───────────────────────────────────────────────────
   function InlinePublicLink({ userId }) {
     const [copied, setCopied] = useState(false);
     const url = userId ? `${window.location.origin}/public/${userId}` : "";
@@ -449,8 +412,52 @@ export default function Books() {
     );
   }
 
-  // ─── Expanded row detail ──────────────────────────────────────────────────
-  // Shared between desktop and mobile to avoid duplication.
+  // ─── Notes section ────────────────────────────────────────────────────────
+  // Renders all household notes on a book, with the current user's note pinned
+  // to the top. Hidden when there are no notes at all.
+  function NotesSection({ notes, userId }) {
+    if (!notes?.length) return null;
+    const sorted = [...notes].sort((a, b) => {
+      const aMine = a.userId === userId ? 1 : 0;
+      const bMine = b.userId === userId ? 1 : 0;
+      if (aMine !== bMine) return bMine - aMine;
+      const aTime = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+      const bTime = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+      return bTime - aTime;
+    });
+    return (
+      <div>
+        <span className="text-xs font-semibold text-gray-400 dark:text-gray-500">Notes:</span>
+        <div className="mt-1 space-y-2">
+          {sorted.map((n, idx) => {
+            const isMine = n.userId === userId;
+            return (
+              <div
+                key={`${n.userId}-${idx}`}
+                className={`px-3 py-2 rounded-lg border text-sm ${isMine
+                  ? "bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800"
+                  : "bg-gray-50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600"}`}
+              >
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <span className="text-xs font-medium text-gray-700 dark:text-gray-200">
+                    {isMine ? "You" : (n.userName || "Someone")}
+                  </span>
+                  {n.updatedAt && (
+                    <span className="text-xs text-gray-400 dark:text-gray-500">
+                      {formatDate(n.updatedAt)}
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words">
+                  {n.text}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
 
   function ExpandedDetail({ book, userId }) {
     return (
@@ -502,6 +509,7 @@ export default function Books() {
             {book.description || "No description added yet."}
           </p>
         </div>
+        <NotesSection notes={book.notes} userId={userId} />
         {(book.userStatus === "reading" || book.userStatus === "read") && (
           <div className="flex flex-wrap gap-4 pt-1">
             {book.startedAt && (
@@ -528,12 +536,8 @@ export default function Books() {
     );
   }
 
-  // ─── Render ───────────────────────────────────────────────────────────────
-
   return (
     <div className="space-y-4">
-
-      {/* Header */}
       <div className="flex justify-between items-center mt-4">
         <h1 className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-gray-100">Books</h1>
         <button onClick={openAddModal} className="bg-blue-600 text-white px-3 py-2 md:px-4 md:py-2 rounded-lg hover:bg-blue-700 transition text-sm md:text-base">
@@ -541,7 +545,6 @@ export default function Books() {
         </button>
       </div>
 
-      {/* Search + Filters toggle + Reset */}
       <div className="flex gap-2 items-center">
         <div className="flex-1">
           <input
@@ -578,11 +581,8 @@ export default function Books() {
         </button>
       </div>
 
-      {/* Collapsible filter panel — 4 columns: House | Genre | Language | Status */}
       {filtersOpen && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
-
-          {/* House */}
           <div className="space-y-2">
             <span className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">House</span>
             {refLoading ? <FilterPillSkeleton count={2} /> : (
@@ -601,8 +601,6 @@ export default function Books() {
               </div>
             )}
           </div>
-
-          {/* Genre */}
           <div className="space-y-2">
             <span className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
               Genre
@@ -633,8 +631,6 @@ export default function Books() {
               </div>
             )}
           </div>
-
-          {/* Language */}
           <div className="space-y-2">
             <span className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Language</span>
             {refLoading ? <FilterPillSkeleton count={4} /> : (
@@ -653,13 +649,10 @@ export default function Books() {
               </div>
             )}
           </div>
-
-          {/* Status */}
           <div className="space-y-2">
             <span className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Status</span>
             <div className="flex flex-wrap gap-1.5">
               {FILTER_STATUSES
-                // "No Status" cannot be combined with Atlas Search — hide it when search is active
                 .filter((s) => !(isAtlasSearch && s === "no-status"))
                 .map((s) => (
                   <button key={s} type="button"
@@ -677,11 +670,9 @@ export default function Books() {
         </div>
       )}
 
-      {/* Active filter tags */}
       {activeFilterCount > 0 && (
         <div className="flex flex-wrap gap-1.5 items-center">
           <span className="text-xs text-gray-400 dark:text-gray-500 mr-0.5">Filtering by:</span>
-
           {filterHouse && (
             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300">
               House: {filterHouse}
@@ -689,7 +680,6 @@ export default function Books() {
                 className="ml-0.5 hover:text-green-900 dark:hover:text-green-100 font-bold leading-none">×</button>
             </span>
           )}
-
           {filterGenres.map((g) => (
             <span key={g} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300">
               Genre: {g}
@@ -697,7 +687,6 @@ export default function Books() {
                 className="ml-0.5 hover:text-blue-900 dark:hover:text-blue-100 font-bold leading-none">×</button>
             </span>
           ))}
-
           {filterLanguage && (
             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300">
               Language: {filterLanguage}
@@ -705,7 +694,6 @@ export default function Books() {
                 className="ml-0.5 hover:text-purple-900 dark:hover:text-purple-100 font-bold leading-none">×</button>
             </span>
           )}
-
           {filterStatus && (
             <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs ${filterStatus === "no-status" ? "bg-slate-600 text-white" : STATUS_STYLES[filterStatus]}`}>
               Status: {STATUS_LABELS[filterStatus]}
@@ -718,7 +706,6 @@ export default function Books() {
 
       {error && <div className="text-red-500 text-sm">{error}</div>}
 
-      {/* ── Mobile card list ────────────────────────────────────────────── */}
       <div className="md:hidden space-y-3">
         {showSkeleton
           ? [...Array(Math.min(limit, 5))].map((_, i) => (
@@ -775,7 +762,6 @@ export default function Books() {
         }
       </div>
 
-      {/* ── Desktop table ───────────────────────────────────────────────── */}
       <div className="hidden md:block bg-white dark:bg-gray-800 rounded-2xl shadow-lg overflow-hidden">
         <table className="w-full table-fixed text-left">
           <colgroup>
@@ -883,14 +869,12 @@ export default function Books() {
         )}
       </div>
 
-      {/* Pagination */}
       <div className="flex items-center justify-between mt-2 gap-2 md:gap-4">
         <div className="hidden md:block w-32 text-sm text-gray-500 dark:text-gray-400">
           {!isAtlasSearch && totalBooks > 0 && (
             <span>{totalBooks} {totalBooks === 1 ? "book" : "books"}</span>
           )}
         </div>
-
         <div className="flex items-center gap-1">
           {!isAtlasSearch && totalPages > 1 && (
             <>
@@ -913,7 +897,6 @@ export default function Books() {
                 className="px-3 py-2 rounded-lg bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 disabled:opacity-50 transition text-sm">→</button>
             </>
           )}
-
           {isAtlasSearch && (
             <>
               <button
@@ -938,7 +921,6 @@ export default function Books() {
             </>
           )}
         </div>
-
         <div className="flex items-center gap-2 justify-end">
           <span className="hidden md:inline text-sm text-gray-600 dark:text-gray-300 whitespace-nowrap">Per page</span>
           <select

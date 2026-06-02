@@ -65,6 +65,7 @@ export default function BookModal({
     const [noteText, setNoteText] = useState(formData.note || "");
     const [noteSaving, setNoteSaving] = useState(false);
     const [noteSaved, setNoteSaved] = useState(false);
+
     const [refLoading, setRefLoading] = useState(true);
     const [refError, setRefError] = useState("");
 
@@ -95,7 +96,6 @@ export default function BookModal({
             <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-2xl max-h-[92vh] flex flex-col"
                 onClick={(e) => e.stopPropagation()}>
 
-                {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 shrink-0">
                     <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100">
                         {isEditing ? "Edit Book" : "Add Book"}
@@ -106,7 +106,6 @@ export default function BookModal({
                     </button>
                 </div>
 
-                {/* Errors */}
                 {(modalError || refError) && (
                     <div className="px-6 pt-3 shrink-0">
                         {modalError && <p className="text-red-500 text-sm">{modalError}</p>}
@@ -114,16 +113,13 @@ export default function BookModal({
                     </div>
                 )}
 
-                {/* Body — two columns on md+, single column on mobile */}
                 <form onSubmit={onSubmit} className="flex flex-col flex-1 min-h-0">
                     <div className="flex-1 overflow-y-auto">
                         <div className="grid grid-cols-1 md:grid-cols-2 md:divide-x md:divide-gray-200 md:dark:divide-gray-700">
 
-                            {/* ── Left column: Book details ─────────────────── */}
                             <div className="px-6 py-5 space-y-4">
                                 <SectionLabel>Book details</SectionLabel>
 
-                                {/* Title + Author */}
                                 <div className="space-y-2">
                                     <input type="text" placeholder="Title" value={formData.title}
                                         onChange={(e) => setFormData({ ...formData, title: e.target.value })}
@@ -133,7 +129,6 @@ export default function BookModal({
                                         className="w-full px-3 py-2 rounded-lg border dark:bg-gray-700 dark:text-white text-sm" />
                                 </div>
 
-                                {/* House */}
                                 <div>
                                     <label className="block mb-1.5 text-xs font-medium text-gray-600 dark:text-gray-400">House</label>
                                     {refLoading ? <PillSkeleton count={2} /> : (
@@ -151,7 +146,6 @@ export default function BookModal({
                                     )}
                                 </div>
 
-                                {/* Genre */}
                                 <div>
                                     <label className="block mb-1.5 text-xs font-medium text-gray-600 dark:text-gray-400">Genre</label>
                                     {refLoading ? <PillSkeleton count={5} /> : (
@@ -177,7 +171,6 @@ export default function BookModal({
                                     )}
                                 </div>
 
-                                {/* Language */}
                                 <div>
                                     <label className="block mb-1.5 text-xs font-medium text-gray-600 dark:text-gray-400">
                                         Language <span className="text-gray-400 font-normal">(optional)</span>
@@ -200,7 +193,6 @@ export default function BookModal({
                                     )}
                                 </div>
 
-                                {/* Location */}
                                 <div>
                                     <label className="block mb-1.5 text-xs font-medium text-gray-600 dark:text-gray-400">
                                         Location in house <span className="text-gray-400 font-normal">(optional)</span>
@@ -212,7 +204,6 @@ export default function BookModal({
                                         className="w-full px-3 py-2 rounded-lg border dark:bg-gray-700 dark:text-white text-sm" />
                                 </div>
 
-                                {/* Description */}
                                 <div>
                                     <label className="block mb-1.5 text-xs font-medium text-gray-600 dark:text-gray-400">
                                         Description <span className="text-gray-400 font-normal">(optional)</span>
@@ -231,10 +222,8 @@ export default function BookModal({
                                 </div>
                             </div>
 
-                            {/* ── Right column: Reading + Series + Sharing ───── */}
                             <div className="px-6 py-5 space-y-5 border-t border-gray-200 dark:border-gray-700 md:border-t-0">
 
-                                {/* Status */}
                                 <div>
                                     <SectionLabel>Reading status</SectionLabel>
                                     <div className="flex flex-wrap gap-1.5">
@@ -267,7 +256,6 @@ export default function BookModal({
                                     )}
                                 </div>
 
-                                {/* Reading dates */}
                                 {(formData.userStatus === "reading" || formData.userStatus === "read") && (
                                     <div className="grid grid-cols-2 gap-3">
                                         <div>
@@ -305,7 +293,6 @@ export default function BookModal({
                                     </div>
                                 )}
 
-                                {/* Rating */}
                                 {formData.userStatus === "read" && (
                                     <div>
                                         <label className="block mb-1.5 text-xs font-medium text-gray-600 dark:text-gray-400">Rating</label>
@@ -333,12 +320,12 @@ export default function BookModal({
                                     </div>
                                 )}
 
-                                {/* My Note — edit mode only, private */}
+                                {/* My Note — edit mode only. Visible to all household members. */}
                                 {isEditing && bookId && (
                                     <div>
                                         <SectionLabel>My Note</SectionLabel>
                                         <textarea
-                                            placeholder="Your personal thoughts on this book..."
+                                            placeholder="Your thoughts on this book — household members will see this..."
                                             value={noteText}
                                             onChange={(e) => {
                                                 if (e.target.value.length <= 1000) {
@@ -350,7 +337,7 @@ export default function BookModal({
                                             className="w-full px-3 py-2 rounded-lg border dark:bg-gray-700 dark:text-white resize-none text-sm"
                                         />
                                         <div className="flex items-center justify-between mt-1">
-                                            <p className="text-xs text-gray-400">{noteText.length} / 1000 · private to you</p>
+                                            <p className="text-xs text-gray-400">{noteText.length} / 1000 · visible to household members</p>
                                             <button
                                                 type="button"
                                                 disabled={noteSaving}
@@ -374,12 +361,10 @@ export default function BookModal({
                                     </div>
                                 )}
 
-                                {/* Series — edit mode only */}
                                 {isEditing && bookId && (
                                     <div>
                                         <SectionLabel>Series</SectionLabel>
                                         {refLoading ? <PillSkeleton count={2} /> : isAdmin ? (
-                                            // Admins can assign series and set order
                                             <>
                                                 <div className="flex gap-2">
                                                     <select value={formData.seriesId || ""}
@@ -405,7 +390,6 @@ export default function BookModal({
                                                 )}
                                             </>
                                         ) : (
-                                            // Non-admins see series info as read-only
                                             formData.seriesId ? (
                                                 <div className="px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600">
                                                     <p className="text-sm text-gray-700 dark:text-gray-300">
@@ -423,7 +407,6 @@ export default function BookModal({
                                     </div>
                                 )}
 
-                                {/* Public sharing */}
                                 <div>
                                     <SectionLabel>Sharing</SectionLabel>
                                     <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600">
@@ -443,7 +426,6 @@ export default function BookModal({
                         </div>
                     </div>
 
-                    {/* Footer */}
                     <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-700 shrink-0">
                         <button type="button" onClick={onClose}
                             className="px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-600 dark:text-white text-sm hover:bg-gray-300 dark:hover:bg-gray-500">

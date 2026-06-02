@@ -1,8 +1,6 @@
 import { useState, useEffect } from "react";
 import { getDiscoverData } from "../api";
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
 function formatDate(dateStr) {
     if (!dateStr) return null;
     return new Date(dateStr).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
@@ -59,10 +57,7 @@ const STATUS_STYLES = {
     "want to read": { bar: "bg-blue-500", label: "text-blue-600 dark:text-blue-400" },
 };
 const STATUS_LABELS = { "read": "Read", "reading": "Reading", "want to read": "Want to Read" };
-
 const ACTIVITY_VERB = { "read": "finished", "reading": "started reading", "want to read": "wants to read" };
-
-// ─── Currently Reading Widget ─────────────────────────────────────────────────
 
 function CurrentlyReadingWidget({ users }) {
     if (!users?.length) return null;
@@ -100,8 +95,6 @@ function CurrentlyReadingWidget({ users }) {
     );
 }
 
-// ─── Activity Feed ────────────────────────────────────────────────────────────
-
 function ActivityFeed({ items }) {
     return (
         <SectionCard
@@ -134,8 +127,6 @@ function ActivityFeed({ items }) {
     );
 }
 
-// ─── Main page ────────────────────────────────────────────────────────────────
-
 export default function Discover() {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -164,7 +155,6 @@ export default function Discover() {
             <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100 mt-4">Discover</h1>
             {error && <div className="text-red-500 text-sm">{error}</div>}
 
-            {/* Currently Reading + Activity Feed — two columns */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {loading ? <SkeletonBlock rows={3} /> : (
                     <CurrentlyReadingWidget users={data?.currentlyReadingByUser} />
@@ -174,7 +164,6 @@ export default function Discover() {
                 )}
             </div>
 
-            {/* My Reading + Genre Breakdown */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {loading ? <SkeletonBlock /> : (
                     <SectionCard
@@ -202,7 +191,6 @@ export default function Discover() {
                         </div>
                     </SectionCard>
                 )}
-
                 {loading ? <SkeletonBlock /> : (
                     <SectionCard
                         title="My Genre Breakdown"
@@ -227,7 +215,6 @@ export default function Discover() {
                 )}
             </div>
 
-            {/* Recommendations + Recently Finished */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {loading ? <SkeletonBlock rows={5} /> : (
                     <SectionCard
@@ -257,7 +244,6 @@ export default function Discover() {
                         </div>
                     </SectionCard>
                 )}
-
                 {loading ? <SkeletonBlock rows={5} /> : (
                     <SectionCard
                         title="Recently Finished by Others"
@@ -266,15 +252,25 @@ export default function Discover() {
                     >
                         <div className="space-y-3">
                             {data.recentlyFinishedByOthers.map((book) => (
-                                <div key={`${book._id}-${book.readerName}`} className="flex items-start justify-between gap-2">
-                                    <div className="min-w-0">
-                                        <p className="text-sm font-medium text-gray-800 dark:text-gray-100 truncate">{book.title}</p>
-                                        <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{book.author}</p>
-                                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-                                            {book.readerName} · {formatDate(book.finishedAt)}
-                                        </p>
+                                <div key={`${book._id}-${book.readerName}`} className="space-y-1">
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-medium text-gray-800 dark:text-gray-100 truncate">{book.title}</p>
+                                            <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{book.author}</p>
+                                            <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                                                {book.readerName} · {formatDate(book.finishedAt)}
+                                            </p>
+                                        </div>
+                                        {book.rating && <StarDisplay rating={book.rating} />}
                                     </div>
-                                    {book.rating && <StarDisplay rating={book.rating} />}
+                                    {book.note && (
+                                        <p
+                                            className="text-xs italic text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-700/50 rounded-lg px-3 py-2 mt-1 whitespace-pre-wrap break-words overflow-hidden"
+                                            style={{ display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical" }}
+                                        >
+                                            “{book.note}”
+                                        </p>
+                                    )}
                                 </div>
                             ))}
                         </div>
@@ -282,7 +278,6 @@ export default function Discover() {
                 )}
             </div>
 
-            {/* Reading Timeline — full width */}
             {loading ? <SkeletonBlock rows={4} /> : (
                 <SectionCard
                     title="My Reading Timeline"
