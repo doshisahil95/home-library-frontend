@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Eye, EyeOff, CheckCircle, XCircle } from "lucide-react";
 import toast from "react-hot-toast";
-import { loginUser, sendResetOTP, resetPassword as apiResetPassword } from "../api";
+import { loginUser, sendResetOTP, resetPassword as apiResetPassword, pingHealth } from "../api";
 
 // Defined outside component for stable identity
 function RuleItem({ valid, text }) {
@@ -103,6 +103,20 @@ export default function Login() {
       });
     }, 1000);
   };
+
+  const [serverWaking, setServerWaking] = useState(true);
+
+  // Warm-up ping on mount — wakes a cold Render instance while the user types
+  // their credentials. By the time they hit Login, the backend should be ready.
+  useEffect(() => {
+    let cancelled = false;
+    pingHealth()
+      .catch(() => false)
+      .finally(() => {
+        if (!cancelled) setServerWaking(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -252,6 +266,12 @@ export default function Login() {
 
         {message && (
           <div className="text-green-500 text-sm text-center">{message}</div>
+        )}
+
+        {serverWaking && (
+          <div className="text-amber-600 dark:text-amber-400 text-xs text-center bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg py-2 px-3">
+            Waking the server… first load can take ~30 seconds.
+          </div>
         )}
 
         {/* ---- LOGIN ---- */}

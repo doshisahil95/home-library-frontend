@@ -351,3 +351,11 @@ export function updateWishlistItem(itemId, item) {
 export function deleteWishlistItem(itemId) {
     return request(`/wishlist/${itemId}`, { method: "DELETE" });
 }
+
+// ─── Health check (used by Login page to warm up cold backend) ───────────────
+export function pingHealth() {
+    const url = import.meta.env.VITE_API_BASE
+        ? `${import.meta.env.VITE_API_BASE}/health`
+        : "/api/health";
+    return fetch(url).then((res) => res.ok);
+}
