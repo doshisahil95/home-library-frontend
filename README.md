@@ -1,71 +1,78 @@
 
-# home-library-frontend
+# home-library-backend
 
-React frontend for the Home Library app. Authenticated users manage a shared physical book collection with search, filtering, sorting, pagination, per-user reading status, ratings, notes, reading goals, series tracking, public sharing, a personal wishlist, and a Discover page that surfaces what the rest of the household is reading.
+Node.js + Express REST API for the Home Library app. Backed by MongoDB Atlas (native driver, no ODM), JWT auth via HttpOnly cookies, Resend for transactional email, Helmet for security headers, and an Atlas Search index for full-text book search.
+
+Multi-tenant per household: every authenticated user shares the same `books` collection, but reading status, ratings, dates, notes (visible to the household), reading goals, and wishlists are scoped per user.
 
 ---
 
 ## Features
 
-### Auth & session
-- Login with JWT via HttpOnly cookie, automatic session-expiry warning and one-click extension
-- Multiple password reset flows: OTP (superadmin), admin-approved, first-time login
-
 ### Books
-- Book table with expandable rows — click any row to reveal genres, location, description, series, public sharing, and your private note
-- Add, edit, delete with per-user reading status (read, reading, want to read)
-- One-way status transitions enforced (can't go backwards once reading or read)
-- Date locking — manually set started / finished dates lock after first save
-- Rating locking — star rating cannot be changed after saving
-- Public sharing toggle per book — appears on a public unauthenticated page
-- Inline public link copy in expanded row and in the Add/Edit modal when sharing is on
-- Sort by title, author, house (disabled during text search). Default browse order is `_id` ascending (oldest added first)
-- Full-text search via Atlas Search with cursor-based prev/next pagination
-- Filter by house (single), genre (multi-select AND), language (single), status — collapsible panel with active badge count and dismissible filter tags
-- "No Status" filter shows books the current user hasn't touched (browse only, incompatible with search)
-- Numbered page pagination with ellipsis for browse mode; prev/next on mobile
+- Browse with filtering (house, genre multi-AND, language, status), sorting, offset pagination
+- Atlas Search full-text query on title + author with cursor pagination
+- Default browse order is `_id` ascending (oldest added first)
+- Per-user reading status (`read`, `reading`, `want to read`) — one-way transitions enforced
+- Per-user `startedAt` / `finishedAt` dates with manual-edit locking
+- Per-user 1–5 star rating, locked after first save
+- Per-user public sharing toggle (independent of reading status) — surfaces on a public unauthenticated page
+- Per-user notes per book — visible to all household members, stripped from the public unauthenticated page
 
-### Series
-- Books can belong to a series with an integer `seriesOrder` (#1, #2, …)
-- Series picker in the Add/Edit modal (admin-only — only admins create/rename series)
-- Series displayed inline in the expanded row on the Books page and on the public page
-- Per-house uniqueness — each house can only hold one "Book #1" of a given series
-- Renaming a series in the Admin panel cascades to every book that references it
-
-### Notes
-- Per-user private note on every book
-- Lives in the expanded row on the Books page
-- Optional household-visible toggle (when on, other household members see the note in their expanded row)
-- Saved with a single API round-trip; rendered with safe sanitisation
+### Series tracking
+- Dedicated `series` collection with case-insensitive uniqueness
+- Books carry a `series` reference + integer `seriesOrder`
+- Per-house uniqueness on `(house, seriesId, seriesOrder)` — one "Book #1" per house
+- Renaming a series cascades to all books holding it
+- Deleting a series is blocked while books reference it
 
 ### Reading goals
-- Private per-user yearly target (number of books to finish this year)
-- Set / edit from the Settings modal
-- Auto-resets each January
-- Dashboard widget shows progress bar and remaining count
+- Private per-user yearly target (number of books to finish)
+- Auto-resets each January (logic keyed on the calendar year)
+- Read/written via `/users/reading-goal` — no separate auth surface
 
-### Dashboard
-- Total books, books by house, books by genre, recently added
-- Reading goal widget with progress bar
+### Discover (per-user, household-aware)
+- Personal stats (books in each status, finished this year, average rating)
+- Genre breakdown
+- Currently Reading widget — what other household members are reading right now (excludes self)
+- 30-day Activity Feed — status changes (started / finished) by other household members, newest first
+- Recommendations — weighted by genre overlap, signed rating adjustment, series progression (book N+1 if you finished book N), and recency (gated on average rating ≥ 3 so poorly-rated books don't get a recency boost). Books with a net-negative score are filtered out entirely
+- Recently finished by others — includes the reader's note text inline when available
+- Reading timeline
 
-### Discover
-- Personal reading stats, genre breakdown, recommendations, recently finished by others, reading timeline
-- **Currently Reading widget** — shows other household members currently reading (name + book title + started date, excludes you)
-- **Activity Feed** — 30-day window of household status changes (started / finished), newest first
-- **Improved Recommendations** — weighted by genre overlap, average rating, series progression (if you finished book N, book N+1 ranks high), and recency
-- **Wishlist** — private per-user list with title + author + optional note, "Convert to library book" action
+### Wishlist
+- Private per-user list (`title`, `author`, optional `note`)
+- Separate from the main library — does not show up to other household members
+- Convertible into a real library book
 
-### Admin panel
-- Reference data management for genres, houses, languages, series — rename cascades to all books, delete is blocked while any book references the value
-- Bulk CSV import for books (with `makePublic`, `series`, `seriesOrder` columns; auto-creates unknown ref values during import)
-- Reference data CSV import / export per type
-- User management (add, delete, role change, approve / revoke password resets) — superadmin only
+### Reference data (genres, houses, languages, series)
+- CRUD via `/reference-data/:type` (and `/series` for series-specific actions)
+- Case-insensitive unique names
+- Renaming cascades to all books that reference the value
+- Deleting is blocked while any book references the value
+- Bulk CSV import / export per ref type
 
-### UX
-- Settings modal — light / dark theme toggle, display name edit, reading goal, public library link copy, "Make all private" button
-- Collapsible desktop sidebar, slide-in mobile sidebar with backdrop
-- Responsive layout — book cards on mobile, full sortable table on desktop
-- Skeleton loading states throughout, typed toast notifications with close button
+### Bulk book CSV import
+- Two-step flow: `validate` (returns row-level errors) then `import`
+- Auto-creates unknown genres / houses / languages / series during import (deduped intra-file)
+- Supports per-row `makePublic` flag and series assignment via `series` + `seriesOrder` columns
+
+### Admin / superadmin
+- User management (list, add, delete, role change) — superadmin-gated
+- Admin-approved password reset, OTP-based reset (via Resend), revoke pending reset
+- All admin write routes protected by `requireAdmin` / `requireSuperAdmin` middleware
+
+### Auth & session
+- JWT issued in HttpOnly cookie (CSRF-safe, JS-inaccessible)
+- `/me` returns user + ms remaining on token; `/refresh-token` re-issues
+- Auth rate-limiter on login + reset endpoints
+- Global rate-limiter on all routes
+
+### Health
+- `/health` — lightweight no-auth endpoint used by the frontend Login page to warm a cold instance before the user submits credentials. Returns `{ ok: true, uptime: <seconds> }`. Does not touch MongoDB.
+
+### Public (no auth)
+- `/public/:userId` returns only books that user has explicitly shared — notes are stripped from this response
 
 ---
 
@@ -73,49 +80,44 @@ React frontend for the Home Library app. Authenticated users manage a shared phy
 
 | Layer | Technology |
 |---|---|
-| Framework | React 18 |
-| Build tool | Vite |
-| Routing | React Router v6 |
-| Styling | Tailwind CSS |
-| Icons | Lucide React |
-| Notifications | react-hot-toast |
-| HTTP | Fetch API (centralised in `api.js`) |
+| Runtime | Node.js 18+ |
+| Framework | Express |
+| Database | MongoDB Atlas (native `mongodb` driver v7+) |
+| Search | Atlas Search index `bookSearch` (autocomplete on title + author, token on house / genre / language, embeddedDocument on statuses, objectId on `_id` for sortable cursor pagination, date on `createdAt`). Auto-created by `db.js` on first boot |
+| Auth | JSON Web Tokens via HttpOnly cookie |
+| Email | Resend |
+| Security | Helmet, express-rate-limit, CORS allow-list, HTTPS redirect in production |
 
 ---
 
 ## Folder Structure
 
 ```
-home-library-frontend/
-├── public/
-├── src/
-│   ├── components/
-│   │   ├── BookModal.jsx         # Add/edit form — series picker, note editor, public link
-│   │   ├── DeleteModal.jsx       # Delete confirmation modal
-│   │   ├── Layout.jsx            # Sidebar, navbar, settings modal (with reading goal), session banner
-│   │   ├── ProtectedRoute.jsx    # Session check — redirects if expired
-│   │   └── SessionContext.js     # Session warning/extend/logout context
-│   ├── data/
-│   │   └── bookConstants.js      # STATUS_STYLES, STATUS_LABELS, STATUSES, FILTER_STATUSES
-│   ├── pages/
-│   │   ├── Admin.jsx             # Reference data + Series tab, bulk import, user management
-│   │   ├── Books.jsx             # Book table with expanded rows (series, note, public)
-│   │   ├── Dashboard.jsx         # Stats cards, bar charts, reading goal widget
-│   │   ├── Discover.jsx          # Stats, recommendations, currently reading, activity feed, wishlist
-│   │   ├── Login.jsx             # Login + all password reset flows
-│   │   └── PublicBooks.jsx       # Public unauthenticated book page (shows series)
-│   ├── App.jsx                   # Router setup, Toaster configuration
-│   ├── api.js                    # All API calls — single source of truth
-│   ├── index.css                 # Tailwind directives
-│   └── main.jsx                  # React root render
-├── vercel.json                   # Security headers (CSP, X-Frame-Options, etc.)
-├── .env.local                    # Local environment variables (never commit)
-├── .gitignore
-├── index.html
+home-library-backend/
+├── api/
+│   ├── controllers/
+│   │   ├── admin.controller.js      # User management, CSV bulk import/export
+│   │   ├── book.controller.js       # CRUD, browse, Atlas Search
+│   │   ├── dashboard.controller.js  # Aggregate collection stats
+│   │   ├── login.controller.js      # Auth flows, password reset, /me, refresh
+│   │   ├── public.controller.js     # Unauthenticated public library view
+│   │   ├── series.controller.js     # Series CRUD + book assignment
+│   │   ├── system.controller.js     # Reference data with cascading rename
+│   │   ├── user.controller.js       # Profile, theme, notes, reading goal, discover
+│   │   └── wishlist.controller.js   # Per-user wishlist CRUD
+│   ├── middleware/
+│   │   ├── auth.middleware.js
+│   │   ├── requireAdmin.middleware.js
+│   │   └── requireSuperAdmin.middleware.js
+│   ├── routes/
+│   │   └── app.routes.js            # All routes wired here
+│   ├── utils/
+│   │   ├── user.utils.js            # JWT issue/verify, cookie helpers
+│   │   └── validate.js              # All input validators
+│   └── db.js                        # Mongo connection + collection accessors + indexes + Atlas Search index
+├── server.js                        # Entry point — env validation, Helmet, CORS, /health, rate limiter, routes
 ├── package.json
-├── postcss.config.js
-├── tailwind.config.js
-└── vite.config.js
+└── .env                             # Never commit
 ```
 
 ---
@@ -124,105 +126,300 @@ home-library-frontend/
 
 ### Prerequisites
 - Node.js 18+
-- The backend (`home-library-backend`) running locally on port 3000
+- A MongoDB Atlas cluster (free tier is fine). The `bookSearch` Atlas Search index is created automatically by `db.js` on first boot — no manual setup required, but it takes 10-60s to become queryable the first time.
+- A Resend account (for password reset emails) — optional in dev if you skip OTP flows
 
 ### Steps
 
 1. Clone and install:
    ```bash
-   git clone https://github.com/your-username/home-library-frontend.git
-   cd home-library-frontend
+   git clone https://github.com/doshisahil95/home-library-backend.git
+   cd home-library-backend
    npm install
    ```
 
-2. Create a `.env.local` file in the project root:
-   ```env
-   VITE_API_BASE=http://localhost:3000
-   ```
+2. Create a `.env` file (see the full table below for all required vars).
 
-3. Start the dev server:
+3. Start the server:
    ```bash
-   npm run dev
+   npm start
    ```
 
-The app will be available at `http://localhost:5173`.
+The API listens on `http://localhost:3000`.
+
+On first boot you'll see:
+```
+Connected to MongoDB
+Created Atlas Search index "bookSearch" — may take 10-60s to become queryable.
+Indexes ensured.
+Server listening on port 3000
+```
+
+On subsequent boots:
+```
+Atlas Search index "bookSearch" already exists.
+```
 
 ---
 
 ## Environment Variables
 
-### Local development
-| Variable | Value |
-|---|---|
-| `VITE_API_BASE` | `http://localhost:3000` |
+All of these are required — `server.js` validates them at boot and exits with a clear error if any are missing or malformed.
 
-### Production (Vercel)
-Set in the Vercel dashboard before the build runs — Vite embeds them at build time.
-
-| Variable | Value |
+### Database
+| Variable | Purpose |
 |---|---|
-| `VITE_API_BASE` | Your Railway backend URL — must include `https://` prefix |
+| `MONGODB_URI` | Atlas connection string |
+| `DATABASE_NAME` | Mongo database name |
+
+### Auth
+| Variable | Purpose |
+|---|---|
+| `JWT_SECRET` | Signing secret for auth tokens — must be at least 32 chars |
+| `JWT_EXPIRY` | JWT lifetime, e.g. `4h` |
+
+### Email
+| Variable | Purpose |
+|---|---|
+| `RESEND_API_KEY` | Resend API key for password reset emails |
+
+### CORS
+| Variable | Purpose |
+|---|---|
+| `CORS_ORIGIN` | Comma-separated allow-list of frontend origins |
+
+### Login brute-force protection
+| Variable | Purpose |
+|---|---|
+| `LOGIN_MAX_ATTEMPTS` | Failed logins before lockout (e.g. `5`) |
+| `LOGIN_LOCKOUT_MS` | Lockout duration in ms (e.g. `900000` for 15 min) |
+
+### OTP
+| Variable | Purpose |
+|---|---|
+| `OTP_MAX_ATTEMPTS` | Wrong OTP attempts before rejection (e.g. `5`) |
+| `OTP_EXPIRY_MS` | OTP validity window (e.g. `600000` for 10 min) |
+
+### Rate limiting
+| Variable | Purpose |
+|---|---|
+| `AUTH_RATE_LIMIT_WINDOW_MS` | Auth window in ms (e.g. `900000`) |
+| `AUTH_RATE_LIMIT_MAX` | Max auth requests per window (e.g. `30`) |
+| `GLOBAL_RATE_LIMIT_WINDOW_MS` | Global window in ms (e.g. `900000`) |
+| `GLOBAL_RATE_LIMIT_MAX` | Max global requests per window (e.g. `300`) |
+
+### Optional
+| Variable | Purpose |
+|---|---|
+| `NODE_ENV` | `production` enables HTTPS enforcement and hides error details |
+| `PORT` | Server port — Render assigns automatically; default `3000` locally |
+
+---
+
+## API Reference
+
+### Health
+| Method | Path | Description |
+|---|---|---|
+| GET | `/health` | No-auth liveness check used by frontend warm-up. Does not touch DB |
+
+### Auth (rate-limited)
+| Method | Path | Description |
+|---|---|---|
+| POST | `/login` | Email + password login, sets HttpOnly JWT cookie |
+| POST | `/send-reset-otp` | Triggers reset flow — returns `method`: `otp` / `first_login` / `approved` / `already_registered` / `contact_admin` |
+| POST | `/reset-password` | Completes password reset (OTP-verified or admin-approved) |
+| POST | `/logout` | Clears cookie |
+
+### Session
+| Method | Path | Description |
+|---|---|---|
+| GET | `/me` | Current user + ms remaining on token |
+| POST | `/refresh-token` | Re-issues JWT cookie |
+
+### Books
+| Method | Path | Description |
+|---|---|---|
+| GET | `/fetchAllBooks` | Browse mode — filter / sort / paginate. Default order `_id` ascending |
+| GET | `/searchBooks` | Atlas Search mode — text query + cursor pagination. Default order `_id` ascending (matches browse) |
+| POST | `/addBook` | Create a book (status optional at create time) |
+| PUT | `/updateBook/:id` | Update core fields + per-user status |
+| DELETE | `/deleteBook/:id` | Delete a book |
+| PUT | `/books/:bookId/note` | Upsert per-user note for a book — empty text deletes |
+
+### Reading goal
+| Method | Path | Description |
+|---|---|---|
+| GET | `/users/reading-goal` | Current year's goal + progress |
+| PUT | `/users/reading-goal` | Set / update target |
+
+### Discover
+| Method | Path | Description |
+|---|---|---|
+| GET | `/discover` | Personal stats, genre breakdown, currently reading widget, activity feed, recommendations (with low-rating penalty), recently finished by others (with notes) |
+
+### User
+| Method | Path | Description |
+|---|---|---|
+| PATCH | `/users/theme` | Persist light/dark preference |
+| PATCH | `/users/profile` | Update display name |
+| POST | `/users/make-all-private` | Strip current user from every book's `publicByUsers` |
+| GET | `/users/public-count` | Count of books currently shared by this user |
+
+### Reference data (genres, houses, languages)
+| Method | Path | Description |
+|---|---|---|
+| GET | `/reference-data/:type` | List entries |
+| POST | `/reference-data/:type` | Create (admin) |
+| PUT | `/reference-data/:type/:id` | Rename — cascades to all books |
+| DELETE | `/reference-data/:type/:id` | Delete (admin) — blocked if any book references it |
+
+### Series
+| Method | Path | Description |
+|---|---|---|
+| GET | `/series` | List all series |
+| POST | `/series` | Create (admin) |
+| PUT | `/series/:id` | Rename (admin) — cascades to all books |
+| DELETE | `/series/:id` | Delete (admin) — blocked if any book references it |
+| POST | `/books/:bookId/series` | Assign book to a series at a given order |
+| DELETE | `/books/:bookId/series` | Remove book from its series |
+
+### Wishlist (private per user)
+| Method | Path | Description |
+|---|---|---|
+| GET | `/wishlist` | List current user's items |
+| POST | `/wishlist` | Add item |
+| PUT | `/wishlist/:itemId` | Edit item |
+| DELETE | `/wishlist/:itemId` | Remove item |
+
+### Admin — book CSV
+| Method | Path | Description |
+|---|---|---|
+| POST | `/admin/csv/validate` | Dry run — returns row-level errors and a preview |
+| POST | `/admin/csv/import` | Persist parsed rows; auto-creates missing ref values |
+
+### Admin — reference data CSV
+| Method | Path | Description |
+|---|---|---|
+| POST | `/admin/ref-csv/validate` | Validate a ref-data CSV |
+| POST | `/admin/ref-csv/import` | Import a ref-data CSV |
+| GET | `/admin/ref-csv/export/:type` | Download a ref-data CSV |
+
+### Admin — users
+| Method | Path | Description |
+|---|---|---|
+| GET | `/admin/users` | List all users (superadmin) |
+| POST | `/admin/users` | Add user (superadmin) |
+| DELETE | `/admin/users/:id` | Remove user (superadmin) |
+| PATCH | `/admin/users/:id/role` | Promote / demote (admin) |
+| POST | `/admin/users/:id/approve-reset` | Pre-approve password reset (superadmin) |
+| POST | `/admin/users/:id/revoke-reset` | Revoke pending approval (superadmin) |
+
+### Public (no auth)
+| Method | Path | Description |
+|---|---|---|
+| GET | `/public/:userId` | Returns only books that user has shared. Notes are stripped from this response |
+
+---
+
+## Data Model
+
+### `users`
+```
+{ _id, email, passwordHash, name, theme, role, readingGoal?: { target, year }, createdAt, ... }
+```
+
+### `books`
+```
+{
+  _id, title, author, house, genre: [String], language,
+  locationInHouse, description,
+  series?: { id: ObjectId, name: String, order: Number },
+  notes?: [{ userId: ObjectId, text: String, updatedAt: Date }],
+  statuses: [{
+    userId, status, startedAt?, startedAtLocked?,
+    finishedAt?, finishedAtLocked?, rating?
+  }],
+  publicByUsers: [ObjectId],
+  createdAt, updatedAt
+}
+```
+
+### `series`
+```
+{ _id, name, createdAt, updatedAt }
+```
+Unique index on `name` (case-insensitive collation strength 2).
+
+### `wishlist`
+```
+{ _id, userId, title, author, note?, createdAt, updatedAt }
+```
+
+### `genres`, `houses`, `languages`
+```
+{ _id, name, createdAt, updatedAt }
+```
+Unique case-insensitive on `name`.
+
+### `passwordResets`
+```
+{ _id, userId, otp?, approvedBy?, expiresAt, ... }
+```
 
 ---
 
 ## Key Implementation Notes
 
-**API layer (`api.js`)** — All HTTP calls go through a single `request()` function that attaches credentials (the JWT HttpOnly cookie), detects 401 responses, clears localStorage, and redirects to login. Public endpoints (login, OTP, reset, public books) use a separate `publicRequest()` that skips auth entirely.
+**Atlas Search index in `db.js`** — The `bookSearch` index definition lives in `db.js` (`BOOK_SEARCH_INDEX_DEFINITION`) and is created on first boot via `createSearchIndex()`. Fields mapped: `_id` (objectId, for sortable cursor pagination), `title` and `author` (autocomplete with edgeGram tokenization and foldDiacritics), `house` / `language` / `genre` (token), `createdAt` (date), and `statuses` as `embeddedDocuments` with nested `userId` (objectId) and `status` (token). The ensure logic skips creation if the index already exists, and silently no-ops on environments where Atlas Search isn't available (local Mongo).
 
-**Session management (`ProtectedRoute` + `SessionContext`)** — On mount and every 5 minutes, `ProtectedRoute` calls `GET /me` to check token validity and milliseconds remaining. If under 10 minutes remain, an amber warning banner appears. Extending the session calls `POST /refresh-token` followed by another `GET /me` to read the actual new expiry. A ref prevents duplicate "session expired" toasts.
+**Cascading rename for reference data** — When a genre / house / language / series is renamed, the rename happens in two steps inside `system.controller.js` (or `series.controller.js`): update the ref-data document, then `updateMany` on `books` to propagate the new value. For genres (an array field) this uses an aggregation pipeline update with `$map` so only the matching string in the array is replaced.
 
-**Password reset flows** — `sendResetOTP` returns a `method` field: `otp` (superadmin, OTP sent via email), `first_login` (new user, no password yet), `approved` (admin pre-approved), `already_registered` (existing user, needs admin approval), or `contact_admin` (unknown email). The login page renders a different screen for each.
+**Cascading delete protection** — A ref-data delete first checks `books.countDocuments({ <bookField>: name })`. If any book still references the value, the request is rejected with a clear error. Users must unmap first.
 
-**Search vs browse** — `isAtlasSearch` is true when a text query is present (Atlas Search + cursor pagination). Filters without text use MongoDB aggregation + offset pagination. Column sorting is only available in browse mode. The "No Status" filter is hidden during search since Atlas Search can't index absence of a subdocument.
+**CSV auto-create** — During book CSV import, unknown genres / houses / languages / series are created on the fly and reused for subsequent rows in the same import (deduped within the file using case-insensitive matching). This avoids the user having to pre-seed ref data before importing.
 
-**Default sort order** — Browse mode without an explicit column sort defaults to `_id` ascending (oldest book first). Click any sortable column header to switch.
+**Series uniqueness per house** — `(house, seriesId, seriesOrder)` is enforced both at single-book write paths and inside CSV import (intra-file plus DB check). Two physical houses can each have their own copy of "Book #1", but the same house cannot.
 
-**Genre filtering** — Multi-select with AND semantics. Active genres sent as repeated query params. Backend uses `$all` in browse mode and multiple `equals` clauses in Atlas Search.
+**Status transitions** — `validateStatusTransition` enforces a one-way state machine: `null → want to read → reading → read`. Any attempt to go backwards returns a 400.
 
-**Status transitions** — One-way enforcement mirrors the backend: null → want to read → reading → read. Backwards transitions are disabled in the UI. Once "read", the status pill is locked.
+**Date and rating locking** — On update, if a user supplies a `startedAt` or `finishedAt` that differs from the previously stored value, the corresponding `*Locked` flag flips to `true` and the field is permanently frozen. Ratings lock immediately after the first non-null save.
 
-**Date and rating locking** — `startedAtLocked` and `finishedAtLocked` flags are stored on the status entry. If a date was manually changed (not auto-set), it locks after the first save. Ratings lock immediately on first save. Lock icons appear next to locked fields.
+**Atlas Search cursor pagination** — `searchBooks` uses `$search` with `searchAfter` and emits `paginationToken: { $meta: "searchSequenceToken" }`. The token is opaque base64 and must be passed back verbatim. The endpoint fetches `limit + 1` to know if a next page exists, then strips the extra row. Sort is `{ _id: 1 }` to match browse mode default — ensures predictable ordering for series and other naturally-ordered content.
 
-**Series** — The BookModal exposes a series dropdown (admin-only — non-admins see the assigned series read-only) plus an integer "Book #" input. The expanded row on the Books page and the public page render `Series Name #N`. Renaming a series in the Admin panel cascades server-side and is reflected on the next data fetch.
+**Response shape for books** — Every book response is augmented by `extractUserStatus()` which flattens the current user's status entry to top-level fields (`userStatus`, `startedAt`, `rating`, `isPublic`, etc.). Other users' statuses are still on `statuses[]` for the Discover endpoint.
 
-**Notes** — Stored per-user on the book document (server-side). The expanded row shows a textarea bound directly to the per-user note; saving fires `PUT /books/:bookId/note`. A toggle controls household visibility.
+**Public sharing** — Stored as `publicByUsers: [ObjectId]` on the book — independent of reading status. The public endpoint returns only books the requested user has explicitly shared, and strips the `notes` array from the response.
 
-**Reading goal** — Settings modal hosts the input. Dashboard subscribes to `/users/reading-goal` and renders a progress bar based on books finished in the current calendar year. The backend resets implicitly each January (no cron — the endpoint just queries the current year).
+**Notes** — Stored on the book document as an array `notes: [{ userId, text, updatedAt }]`. Visible to all household members — when responses are returned to authenticated users, each note is enriched with `userName` via a single batched lookup on `users` (so the frontend can render "Note from Alice" without N+1 round trips). Empty text on the upsert endpoint deletes the note.
 
-**Discover** — Single `/discover` round-trip returns: stats, genre breakdown, currently reading list (other members), 30-day activity feed, recommendations, recently finished, timeline, and wishlist count. Each section is a self-contained card on the page.
+**Recommendations scoring** — Final score per candidate book is:
+```
+genreOverlap + ratingAdjustment(avg) + recencyBonus + seriesProgressionBonus
+```
+where `ratingAdjustment` is signed: `+6` for avg ≥ 4.5, `+3` for ≥ 3.5, `0` for ≥ 2.5, `-3` for ≥ 1.5, `-6` below. Recency bonus (`+3`) only applies when the book has either no ratings yet or avg ≥ 3, so a 1-star recently-finished book never gets a recency boost. Books with net-negative scores are filtered out — recommending nothing beats recommending something the household disliked.
 
-**Wishlist** — Lives in a Discover card. Add / edit / delete inline; "Convert to library book" prefills the BookModal with the wishlist title + author and removes the wishlist entry on successful save.
+**Reading goal auto-reset** — There is no scheduled job. The endpoint reads the current `year` and looks up the goal for that year — January 1 naturally returns "no goal for this year yet".
 
-**Public sharing** — `isPublic` per book is stored as `publicByUsers: [ObjectId]` on the book document, independent of reading status. The Settings modal shows the public link, count of shared books, and a "Make all private" button that fires a single `POST /users/make-all-private`.
+**HTTPS enforcement** — `server.js` redirects `http://` to `https://` in production based on `x-forwarded-proto` (Render terminates TLS at the edge and forwards via this header).
 
-**Toasts** — `react-hot-toast` with custom `ToastBar` render: dark green for success, dark red for error, dark gray for default. Each toast has an × close button.
-
-**Theme** — Stored in MongoDB per user, read from localStorage on mount to avoid flash. Tailwind dark mode is `class`-based — `document.documentElement.classList.toggle("dark", ...)` is called on theme change.
-
-**Sidebar** — `SidebarContent` is defined outside `Layout` to prevent re-creation on every Layout state change. Collapse animates width; text uses opacity + width transition to fade without layout shift.
-
----
-
-## Security Headers (`vercel.json`)
-
-| Header | Purpose |
-|---|---|
-| `Content-Security-Policy` | Restricts scripts, styles, and API connections to known origins |
-| `X-Frame-Options: DENY` | Prevents clickjacking via iframe |
-| `X-Content-Type-Options: nosniff` | Prevents MIME-type sniffing |
-| `Referrer-Policy` | Limits referrer info sent to external sites |
-| `Permissions-Policy` | Disables camera, microphone, geolocation |
-
-**Important** — update the `connect-src` value in `vercel.json` with your actual Railway URL before deploying.
+**Env validation at boot** — All env vars are validated upfront with concrete hints. Missing or malformed values cause `process.exit(1)` with one line per missing var explaining what's expected.
 
 ---
 
-## Deployment (Vercel)
+## Deployment (Render)
 
 1. Push to GitHub.
-2. Go to [vercel.com](https://vercel.com) → Add New Project → select your repo.
-3. Vite is auto-detected. Leave build settings as default.
-4. Add environment variable: `VITE_API_BASE` = `https://your-railway-url.up.railway.app`
-5. Update `vercel.json` — replace the placeholder in `connect-src` with your actual Railway URL.
-6. Deploy. Copy the Vercel URL and set it as `CORS_ORIGIN` in Railway.
-7. Subsequent deploys happen automatically on `git push`.
+2. [render.com](https://render.com) → New + → **Web Service** → connect this repo.
+3. Settings:
+   - **Runtime:** Node
+   - **Build Command:** `npm install`
+   - **Start Command:** `npm start`
+   - **Instance Type:** Free
+4. Add every environment variable listed above.
+5. `CORS_ORIGIN` — set to your deployed Vercel frontend URL exactly (https://, no trailing slash).
+6. Skip `COOKIE_DOMAIN` — Render and Vercel are different root domains, so the default cookie behavior with `sameSite: "none", secure: true` is what you want.
+7. Deploy. Render gives you a `*.onrender.com` URL — use it as `VITE_API_BASE` in the frontend.
+8. Whitelist `0.0.0.0/0` in MongoDB Atlas Network Access (Render uses dynamic egress IPs on the free tier).
+
+**Cold start behavior** — Render's free tier sleeps the service after 15 min of no traffic. First request after sleep takes ~30s. The frontend mitigates this by pinging `/health` from the Login page on mount so the backend warms up while the user is typing credentials.
