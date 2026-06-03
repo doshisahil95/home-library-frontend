@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useLayoutEffect } from "react";
 import { getDiscoverData } from "../api";
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 function formatDate(dateStr) {
     if (!dateStr) return null;
     return new Date(dateStr).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
@@ -51,6 +52,48 @@ function SectionCard({ title, children, empty, emptyText = "Nothing here yet." }
     );
 }
 
+// ─── Expandable note — clamps to 3 lines, "Show more" only if it overflows ───
+function ExpandableNote({ text }) {
+    const [expanded, setExpanded] = useState(false);
+    const [isOverflowing, setIsOverflowing] = useState(false);
+    const ref = useRef(null);
+
+    // Detect overflow after layout. The "Show more" link only appears when the
+    // clamped content would actually be cut off, so short notes don't show a
+    // pointless toggle.
+    useLayoutEffect(() => {
+        if (!ref.current) return;
+        const el = ref.current;
+        // scrollHeight > clientHeight means more content exists than what's visible
+        setIsOverflowing(el.scrollHeight > el.clientHeight + 1);
+    }, [text]);
+
+    const clampStyle = expanded
+        ? {}
+        : { display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical" };
+
+    return (
+        <div>
+            <p
+                ref={ref}
+                className="text-xs italic text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-700/50 rounded-lg px-3 py-2 whitespace-pre-wrap break-words overflow-hidden"
+                style={clampStyle}
+            >
+                “{text}”
+            </p>
+            {isOverflowing && (
+                <button
+                    type="button"
+                    onClick={() => setExpanded((v) => !v)}
+                    className="mt-1 text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                >
+                    {expanded ? "Show less" : "Show more"}
+                </button>
+            )}
+        </div>
+    );
+}
+
 const STATUS_STYLES = {
     "read": { bar: "bg-green-500", label: "text-green-600 dark:text-green-400" },
     "reading": { bar: "bg-yellow-500", label: "text-yellow-600 dark:text-yellow-400" },
@@ -59,6 +102,7 @@ const STATUS_STYLES = {
 const STATUS_LABELS = { "read": "Read", "reading": "Reading", "want to read": "Want to Read" };
 const ACTIVITY_VERB = { "read": "finished", "reading": "started reading", "want to read": "wants to read" };
 
+// ─── Currently Reading Widget ─────────────────────────────────────────────────
 function CurrentlyReadingWidget({ users }) {
     if (!users?.length) return null;
     return (
@@ -95,6 +139,7 @@ function CurrentlyReadingWidget({ users }) {
     );
 }
 
+// ─── Activity Feed ────────────────────────────────────────────────────────────
 function ActivityFeed({ items }) {
     return (
         <SectionCard
@@ -127,6 +172,7 @@ function ActivityFeed({ items }) {
     );
 }
 
+// ─── Main page ────────────────────────────────────────────────────────────────
 export default function Discover() {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -263,14 +309,7 @@ export default function Discover() {
                                         </div>
                                         {book.rating && <StarDisplay rating={book.rating} />}
                                     </div>
-                                    {book.note && (
-                                        <p
-                                            className="text-xs italic text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-700/50 rounded-lg px-3 py-2 mt-1 whitespace-pre-wrap break-words overflow-hidden"
-                                            style={{ display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical" }}
-                                        >
-                                            “{book.note}”
-                                        </p>
-                                    )}
+                                    {book.note && <ExpandableNote text={book.note} />}
                                 </div>
                             ))}
                         </div>

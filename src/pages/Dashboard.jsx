@@ -48,7 +48,6 @@ function SkeletonBlock() {
 }
 
 // ─── Reading Goal Widget ──────────────────────────────────────────────────────
-
 function ReadingGoalWidget() {
   const [goalData, setGoalData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -92,6 +91,56 @@ function ReadingGoalWidget() {
   );
 }
 
+// ─── Books by Genre — top 5 by default with expand/collapse toggle ───────────
+// Long-tail genres (often 1 book each) bloat the dashboard, so we show the
+// most-stocked 5 by default and let the user expand to see the full list.
+const GENRE_DEFAULT_VISIBLE = 5;
+
+function GenreBreakdown({ byGenre }) {
+  const [expanded, setExpanded] = useState(false);
+
+  if (!byGenre?.length) {
+    return (
+      <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg">
+        <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200 mb-4">Books by Genre</h2>
+        <p className="text-gray-400 text-sm">No data yet</p>
+      </div>
+    );
+  }
+
+  const total = byGenre.length;
+  const hasMore = total > GENRE_DEFAULT_VISIBLE;
+  const visible = expanded ? byGenre : byGenre.slice(0, GENRE_DEFAULT_VISIBLE);
+  const max = byGenre[0].count;
+
+  return (
+    <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200">Books by Genre</h2>
+        {hasMore && (
+          <span className="text-xs text-gray-400 dark:text-gray-500">
+            {expanded ? `${total} total` : `Top ${GENRE_DEFAULT_VISIBLE} of ${total}`}
+          </span>
+        )}
+      </div>
+      <div className="space-y-3">
+        {visible.map(({ genre, count }) => (
+          <BarRow key={genre} label={genre} count={count} max={max} />
+        ))}
+      </div>
+      {hasMore && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-4 text-sm text-blue-600 dark:text-blue-400 hover:underline"
+        >
+          {expanded ? "Show less" : `Show all ${total} genres`}
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -107,7 +156,6 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100 mt-4">Dashboard</h1>
-
       {error && <div className="text-red-500">{error}</div>}
 
       {/* Reading Goal — only shown if a goal is set */}
@@ -140,18 +188,8 @@ export default function Dashboard() {
             ) : <p className="text-gray-400 text-sm">No data yet</p>}
           </div>
         )}
-        {loading ? <SkeletonBlock /> : (
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg">
-            <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200 mb-4">Books by Genre</h2>
-            {stats?.byGenre?.length > 0 ? (
-              <div className="space-y-3">
-                {stats.byGenre.map(({ genre, count }) => (
-                  <BarRow key={genre} label={genre} count={count} max={stats.byGenre[0].count} />
-                ))}
-              </div>
-            ) : <p className="text-gray-400 text-sm">No data yet</p>}
-          </div>
-        )}
+
+        {loading ? <SkeletonBlock /> : <GenreBreakdown byGenre={stats?.byGenre} />}
       </div>
 
       {/* Row 3: Recently Added */}
