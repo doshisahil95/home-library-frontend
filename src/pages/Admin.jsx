@@ -26,6 +26,7 @@ import {
     createSeries,
     updateSeries,
     deleteSeries,
+    exportBooksCSV,
 } from "../api";
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
@@ -535,8 +536,6 @@ function ReferenceSection({ title, type, color, items, loading, onAdd, onEdit, o
     );
 }
 
-
-
 // ─── Series Tab ───────────────────────────────────────────────────────────────
 // Admin+ only. Create, edit, delete series. Books are linked from the Books page.
 
@@ -730,6 +729,7 @@ function CSVImportTab() {
     const [stopOnError, setStopOnError] = useState(false);
     const [validating, setValidating] = useState(false);
     const [importing, setImporting] = useState(false);
+    const [exporting, setExporting] = useState(false);
     const [phase, setPhase] = useState("idle");
     const [validResult, setValidResult] = useState(null);
     const [importResult, setImportResult] = useState(null);
@@ -778,6 +778,18 @@ function CSVImportTab() {
         }
     };
 
+    const handleExport = async () => {
+        try {
+            setExporting(true);
+            await exportBooksCSV();
+            toast.success("Export downloaded");
+        } catch (err) {
+            toast.error(err.message || "Export failed");
+        } finally {
+            setExporting(false);
+        }
+    };
+
     const handleReset = () => {
         setCsvText("");
         setFileName("");
@@ -789,19 +801,31 @@ function CSVImportTab() {
 
     return (
         <div className="space-y-5 max-w-3xl">
-            <div className="flex items-center justify-between">
+            <div className="flex items-start justify-between gap-3 flex-wrap">
                 <div>
                     <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200">Bulk Import Books</h2>
                     <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
                         Upload a CSV file to add multiple books at once. Validate first, then import.
                     </p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                        Importing does not remove existing books — new rows are appended. Duplicates (same title and author) are skipped.
+                    </p>
                 </div>
-                <button
-                    onClick={downloadSampleCSV}
-                    className="shrink-0 px-4 py-2 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition"
-                >
-                    ↓ Sample CSV
-                </button>
+                <div className="flex gap-2 shrink-0">
+                    <button
+                        onClick={handleExport}
+                        disabled={exporting}
+                        className="shrink-0 px-4 py-2 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                    >
+                        {exporting ? "Exporting…" : "↓ Export Current Books"}
+                    </button>
+                    <button
+                        onClick={downloadSampleCSV}
+                        className="shrink-0 px-4 py-2 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition"
+                    >
+                        ↓ Sample CSV
+                    </button>
+                </div>
             </div>
 
             <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4 text-xs text-gray-500 dark:text-gray-400 space-y-1 border border-gray-200 dark:border-gray-600">
@@ -1337,8 +1361,6 @@ export default function Admin() {
                     </div>
                 </div>
             )}
-
-
 
             {/* ── Bulk Import tab ────────────────────────────────────────────────── */}
             {activeTab === "csv" && <CSVImportTab />}

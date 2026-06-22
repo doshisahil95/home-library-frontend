@@ -359,3 +359,24 @@ export function pingHealth() {
         : "/api/health";
     return fetch(url).then((res) => res.ok);
 }
+
+// Fetches all books as a CSV and triggers a browser download.
+// The exported file uses the same column format as the import, so it can be
+// edited offline and re-uploaded.
+export async function exportBooksCSV() {
+    const res = await fetch(`${BASE_URL}/admin/csv/export`, {
+        credentials: "include",
+    });
+    if (res.status === 401) {
+        localStorage.removeItem("user");
+        window.location.href = "/";
+        return;
+    }
+    if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.message || "Export failed");
+    }
+    const csv = await res.text();
+    const stamp = new Date().toISOString().slice(0, 10);
+    triggerCSVDownload(csv, `books_export_${stamp}.csv`);
+}
